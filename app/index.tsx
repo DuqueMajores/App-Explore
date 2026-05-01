@@ -1,25 +1,34 @@
-import { useState, useEffect } from "react";
-import { View, Text, TextInput, TouchableOpacity, FlatList, Image, StyleSheet, StatusBar } from "react-native";
+import { useState, useEffect, useRef } from "react";
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  FlatList, 
+  Image, 
+  StyleSheet, 
+  StatusBar, 
+  Animated, 
+  TouchableWithoutFeedback,
+  Dimensions
+} from "react-native";
 import { router } from "expo-router";
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from "./AuthContext";
 
-let persistenceArticles = [];
-let persistenceSearch = "";
+const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const [search, setSearch] = useState(persistenceSearch);
-  const [articles, setArticles] = useState(persistenceArticles);
+  const { user } = useAuth();
+  const [search, setSearch] = useState("");
+  const [articles, setArticles] = useState([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuAnimation = useRef(new Animated.Value(0)).current;
+  
   const API_KEY = 'dde2b5709e25424c9d31a5ebd0c60287';
 
   useEffect(() => {
-    persistenceArticles = articles;
-    persistenceSearch = search;
-  }, [articles, search]);
-
-  useEffect(() => {
-    if (articles.length === 0) {
-      buscarNoticias();
-    }
+    buscarNoticias();
   }, []);
 
   async function buscarNoticias() {
@@ -34,11 +43,73 @@ export default function HomeScreen() {
     }
   }
 
+  const toggleMenu = () => {
+    const toValue = menuOpen ? 0 : 1;
+    setMenuOpen(!menuOpen);
+    Animated.spring(menuAnimation, {
+      toValue,
+      useNativeDriver: true,
+      friction: 5,
+      tension: 40
+    }).start();
+  };
+
+  const menuTranslateY = menuAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-200, 0]
+  });
+
+  const menuOpacity = menuAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1]
+  });
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      <Text style={styles.headerTitle}>Explore</Text>
+      
+      {/* Header com Menu */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Explore</Text>
+        <TouchableOpacity onPress={toggleMenu} style={styles.menuIconButton}>
+          <MaterialIcons name={menuOpen ? "close" : "menu"} size={30} color="#4169E1" />
+        </TouchableOpacity>
+      </View>
 
+      {/* Menu Expansível */}
+      {menuOpen && (
+        <TouchableWithoutFeedback onPress={toggleMenu}>
+          <View style={styles.menuOverlay} />
+        </TouchableWithoutFeedback>
+      )}
+      
+      <Animated.View style={[
+        styles.expandedMenu, 
+        { 
+          transform: [{ translateY: menuTranslateY }],
+          opacity: menuOpacity
+        }
+      ]}>
+        {!user ? (
+          <>
+            <TouchableOpacity style={styles.menuOption} onPress={() => { toggleMenu(); router.push("/login"); }}>
+              <MaterialIcons name="login" size={22} color="#4169E1" />
+              <Text style={styles.menuOptionText}>Login</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuOption} onPress={() => { toggleMenu(); router.push("/login"); }}>
+              <MaterialIcons name="person-add" size={22} color="#4169E1" />
+              <Text style={styles.menuOptionText}>Criar Conta</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity style={styles.menuOption} onPress={() => { toggleMenu(); router.push("/perfil"); }}>
+            <MaterialIcons name="account-circle" size={22} color="#4169E1" />
+            <Text style={styles.menuOptionText}>Meu Perfil ({user.name.split(' ')[0]})</Text>
+          </TouchableOpacity>
+        )}
+      </Animated.View>
+
+      {/* Barra de Pesquisa */}
       <View style={styles.searchContainer}>
         <TextInput
           value={search}
@@ -52,9 +123,9 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Lista de Notícias */}
       <FlatList
         data={articles}
-        removeClippedSubviews={true}
         contentContainerStyle={{ paddingBottom: 20 }}
         showsVerticalScrollIndicator={false}
         keyExtractor={(item, index) => index.toString()}
@@ -81,47 +152,101 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:
-  {
+  container: {
     flex: 1,
-    backgroundColor: "#F8F9FA", paddingHorizontal: 20
+    backgroundColor: "#F8F9FA", 
+    paddingHorizontal: 20
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 60,
+    marginBottom: 20,
   },
   headerTitle: {
     fontSize: 32, 
     fontWeight: "800", 
     color: "#212529", 
-    marginTop: 60, 
-    marginBottom: 20,
-    marginLeft: 110,
-    letterSpacing: 1,
-
+    letterSpacing: 1
+  },
+  menuIconButton: {
+    padding: 5,
+  },
+  menuOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+  },
+  expandedMenu: {
+    position: 'absolute',
+    top: 110,
+    right: 20,
+    backgroundColor: '#FFF',
+    borderRadius: 15,
+    padding: 10,
+    zIndex: 11,
+    width: 200,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  menuOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  menuOptionText: {
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
   },
   searchContainer: {
-    flexDirection: "row", marginBottom: 25, gap: 10
-
+    flexDirection: "row", 
+    marginBottom: 25, 
+    gap: 10
   },
-  input:
-  {
-    flex: 1, backgroundColor: "#FFF", borderRadius: 12, paddingHorizontal: 16, fontSize: 16, elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4
+  input: {
+    flex: 1, 
+    backgroundColor: "#FFF", 
+    borderRadius: 12, 
+    paddingHorizontal: 16, 
+    fontSize: 16, 
+    elevation: 2, 
+    shadowColor: "#000", 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 4
   },
-  searchButton:
-  {
-    backgroundColor: "#4169E1", paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12, justifyContent: "center"
-
+  searchButton: {
+    backgroundColor: "#4169E1", 
+    paddingVertical: 14, 
+    paddingHorizontal: 20, 
+    borderRadius: 12, 
+    justifyContent: "center"
   },
-  buttonText:
-  {
-    color: "#FFF", fontWeight: "600", fontSize: 15
-
+  card: {
+    backgroundColor: "#FFF", 
+    borderRadius: 20, 
+    marginBottom: 20, 
+    overflow: "hidden", 
+    elevation: 3, 
+    shadowColor: "#000", 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 8
   },
-  card:
-  {
-    backgroundColor: "#FFF", borderRadius: 20, marginBottom: 20, overflow: "hidden", elevation: 3, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8
-  },
-  cardImage:
-  {
-    width: "100%", height: 200
-
+  cardImage: {
+    width: "100%", 
+    height: 200
   },
   cardContent: { padding: 16 },
   cardCategory: { color: "#E63946", fontWeight: "bold", fontSize: 12, textTransform: "uppercase", marginBottom: 6 },
