@@ -87,7 +87,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8F9FA", paddingHorizontal: 20
   },
   headerTitle: {
-    fontSize: 32, fontWeight: "800", color: "#1A1A1A", marginTop: 60, marginBottom: 20
+    fontSize: 32, 
+    fontWeight: "800", 
+    color: "#212529", 
+    marginTop: 60, 
+    marginBottom: 20,
+    marginLeft: 110,
+    letterSpacing: 1,
 
   },
   searchContainer: {
