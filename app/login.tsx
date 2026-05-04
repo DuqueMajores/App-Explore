@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from "react-native";
-import { router } from "expo-router";
-import { useAuth } from "./AuthContext";
 import { MaterialIcons } from '@expo/vector-icons';
+import { router } from "expo-router";
+import { useState } from "react";
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useAuth } from "../src/context/AuthContext";
 
 export default function LoginScreen() {
 
@@ -36,7 +36,7 @@ export default function LoginScreen() {
         await signUp(name, email, password); 
         Alert.alert("Sucesso", "Conta criada com sucesso! Bem-vindo!");
       }
-      // Aguardar um pouco antes de navegar para melhor UX
+      // Usar setTimeout para garantir que a navegação acontece após o render
       setTimeout(() => {
         router.replace("/");
       }, 500);
@@ -59,7 +59,11 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+      <TouchableOpacity 
+        style={styles.backButton} 
+        onPress={() => router.back()}
+        disabled={loading}
+      >
         <MaterialIcons name="arrow-back" size={24} color="#333" />
       </TouchableOpacity>
 

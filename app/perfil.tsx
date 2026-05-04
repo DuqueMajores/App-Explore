@@ -1,10 +1,25 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
-import { useAuth } from "./AuthContext";
-import { router } from "expo-router";
 import { MaterialIcons } from '@expo/vector-icons';
+import { router, useFocusEffect } from "expo-router";
+import React from "react";
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useAuth } from "../src/context/AuthContext";
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, loading } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+
+  // Verificar autenticação quando a tela ganhar foco
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!loading && !user) {
+        // Usar setTimeout para garantir que a navegação acontece após o render
+        const timer = setTimeout(() => {
+          router.replace("/login");
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }, [user, loading])
+  );
 
   const handleLogout = () => {
     Alert.alert(
@@ -20,17 +35,29 @@ export default function ProfileScreen() {
           style: "destructive", 
           onPress: async () => {
             try {
+              setIsLoggingOut(true);
               await signOut();
               Alert.alert("Logout", "Você saiu da sua conta com sucesso."); 
               router.replace("/login");
             } catch (error: any) {
               Alert.alert("Erro", error.message || "Erro ao fazer logout");
+            } finally {
+              setIsLoggingOut(false);
             }
           } 
         }
       ]
     );
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4169E1" />
+        <Text style={styles.loadingText}>Carregando...</Text>
+      </View>
+    );
+  }
 
   if (!user) {
     return (
@@ -39,7 +66,7 @@ export default function ProfileScreen() {
         <Text style={styles.notLoggedText}>Você não está logado.</Text>
         <TouchableOpacity 
           style={styles.loginButton}
-          onPress={() => router.push("/login")}
+          onPress={() => router.replace("/login")}
         >
           <Text style={styles.loginButtonText}>Fazer Login</Text>
         </TouchableOpacity>
@@ -85,10 +112,20 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.logoutItem} onPress={handleLogout}>
-        <MaterialIcons name="logout" size={22} color="#E63946" />
-        <Text style={styles.logoutText}>Sair da Conta</Text>
-        <MaterialIcons name="chevron-right" size={22} color="#E63946" />
+      <TouchableOpacity 
+        style={styles.logoutItem} 
+        onPress={handleLogout}
+        disabled={isLoggingOut}
+      >
+        {isLoggingOut ? (
+          <ActivityIndicator color="#E63946" size="small" />
+        ) : (
+          <MaterialIcons name="logout" size={22} color="#E63946" />
+        )}
+        <Text style={styles.logoutText}>
+          {isLoggingOut ? "Saindo..." : "Sair da Conta"}
+        </Text>
+        {!isLoggingOut && <MaterialIcons name="chevron-right" size={22} color="#E63946" />}
       </TouchableOpacity>
 
       <View style={styles.footer}>
@@ -108,6 +145,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center',
     backgroundColor: "#F8F9FA",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: "#F8F9FA",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#666",
+    marginTop: 10,
   },
   header: { 
     paddingTop: 50, 
