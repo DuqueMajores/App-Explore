@@ -8,6 +8,7 @@ export interface ForumComment {
   userEmail: string;
   createdAt: string;
   parentId: string | null;
+  likes: string[];           // ← array de emails que curtiram
 }
 
 export interface ForumRoom {
@@ -38,11 +39,11 @@ interface ForumContextData {
     userEmail: string,
     parentId: string | null
   ) => Promise<void>;
-  deleteRoom: (roomId: string) => Promise<void>;  // ← NOVO
+  deleteRoom: (roomId: string) => Promise<void>;
+  toggleLike: (roomId: string, commentId: string, userEmail: string) => Promise<{ wasLiked: boolean; commentOwnerEmail: string }>;
 }
 
 const STORAGE_KEY = '@Forum:rooms';
-
 const ForumContext = createContext<ForumContextData>({} as ForumContextData);
 
 function generateId(): string {
@@ -57,7 +58,13 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         const stored = await AsyncStorage.getItem(STORAGE_KEY);
         if (stored) {
-          setRooms(JSON.parse(stored));
+          const parsed: ForumRoom[] = JSON.parse(stored);
+          // migração: garantir que comentários antigos tenham likes
+          const migrated = parsed.map(room => ({
+            ...room,
+            comments: room.comments.map(c => ({ likes: [], ...c })),
+          }));
+          setRooms(migrated);
         }
       } catch (error) {
         console.error('Erro ao carregar salas do forum:', error);
@@ -74,7 +81,7 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  const getRoomByArticleUrl = useCallback((url: string): ForumRoom | undefined => {
+  const getRoomByArticleUrl = useCallback((url: string) => {
     return rooms.find(r => r.articleUrl === url);
   }, [rooms]);
 
@@ -115,13 +122,11 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       userEmail,
       createdAt: new Date().toISOString(),
       parentId,
+      likes: [],
     };
-    const updatedRooms = rooms.map(room => {
-      if (room.id === roomId) {
-        return { ...room, comments: [...room.comments, newComment] };
-      }
-      return room;
-    });
+    const updatedRooms = rooms.map(room =>
+      room.id === roomId ? { ...room, comments: [...room.comments, newComment] } : room
+    );
     setRooms(updatedRooms);
     await persistRooms(updatedRooms);
   }, [rooms, persistRooms]);
@@ -132,8 +137,38 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await persistRooms(updatedRooms);
   }, [rooms, persistRooms]);
 
+  const toggleLike = useCallback(async (
+    roomId: string,
+    commentId: string,
+    userEmail: string
+  ): Promise<{ wasLiked: boolean; commentOwnerEmail: string }> => {
+    let wasLiked = false;
+    let commentOwnerEmail = '';
+
+    const updatedRooms = rooms.map(room => {
+      if (room.id !== roomId) return room;
+      const updatedComments = room.comments.map(comment => {
+        if (comment.id !== commentId) return comment;
+        commentOwnerEmail = comment.userEmail;
+        const alreadyLiked = comment.likes.includes(userEmail);
+        wasLiked = alreadyLiked;
+        return {
+          ...comment,
+          likes: alreadyLiked
+            ? comment.likes.filter(e => e !== userEmail)
+            : [...comment.likes, userEmail],
+        };
+      });
+      return { ...room, comments: updatedComments };
+    });
+
+    setRooms(updatedRooms);
+    await persistRooms(updatedRooms);
+    return { wasLiked, commentOwnerEmail };
+  }, [rooms, persistRooms]);
+
   return (
-    <ForumContext.Provider value={{ rooms, getRoomByArticleUrl, createRoom, addComment, deleteRoom }}>
+    <ForumContext.Provider value={{ rooms, getRoomByArticleUrl, createRoom, addComment, deleteRoom, toggleLike }}>
       {children}
     </ForumContext.Provider>
   );
@@ -141,8 +176,6 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
 export function useForum() {
   const context = useContext(ForumContext);
-  if (!context) {
-    throw new Error('useForum deve ser usado dentro de um ForumProvider');
-  }
+  if (!context) throw new Error('useForum deve ser usado dentro de um ForumProvider');
   return context;
 }

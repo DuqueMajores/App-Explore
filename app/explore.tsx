@@ -1,5 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Linking,
   ScrollView,
@@ -33,6 +35,12 @@ export default function ExploreScreen() {
   const router = useRouter();
   const existingRoom = getRoomByArticleUrl(articleUrl);
 
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [debateContent, setDebateContent] = useState<{ favor: string; contra: string } | null>(null);
+  const [loadingDebate, setLoadingDebate] = useState(false);
+  const [activeTab, setActiveTab] = useState<'summary' | 'debate' | null>(null);
+
   const handleForumPress = async () => {
     if (!user) return;
     if (existingRoom) {
@@ -46,6 +54,60 @@ export default function ExploreScreen() {
         desc || ""
       );
       router.push(`/forum-room?roomId=${newRoom.id}`);
+    }
+  };
+
+  const handleAiSummary = async () => {
+    if (aiSummary) { setActiveTab('summary'); return; }
+    setLoadingSummary(true);
+    setActiveTab('summary');
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{
+            role: "user",
+            content: `Resuma esta notícia em exatamente 3 pontos objetivos em português, usando bullet points (•). Seja direto e informativo.\n\nTítulo: ${title}\n\nDescrição: ${desc}`,
+          }],
+        }),
+      });
+      const data = await response.json();
+      setAiSummary(data.content?.[0]?.text ?? "Não foi possível gerar o resumo.");
+    } catch {
+      setAiSummary("Erro ao conectar com a IA. Tente novamente.");
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
+
+  const handleDebate = async () => {
+    if (debateContent) { setActiveTab('debate'); return; }
+    setLoadingDebate(true);
+    setActiveTab('debate');
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{
+            role: "user",
+            content: `Sobre esta notícia, gere dois lados de um debate em português. Retorne APENAS JSON válido, sem markdown, sem texto extra:\n{"favor":"argumento a favor em 2-3 frases","contra":"argumento contra em 2-3 frases"}\n\nTítulo: ${title}\nDescrição: ${desc}`,
+          }],
+        }),
+      });
+      const data = await response.json();
+      const raw = data.content?.[0]?.text ?? '{}';
+      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+      setDebateContent(parsed);
+    } catch {
+      setDebateContent({ favor: "Não foi possível gerar o debate.", contra: "Tente novamente." });
+    } finally {
+      setLoadingDebate(false);
     }
   };
 
@@ -63,6 +125,82 @@ export default function ExploreScreen() {
         </View>
 
         <View style={styles.divider} />
+
+        {/* Botões de IA */}
+        <View style={styles.aiButtonsRow}>
+          <TouchableOpacity
+            style={[styles.aiButton, activeTab === 'summary' && styles.aiButtonActive]}
+            onPress={handleAiSummary}
+            activeOpacity={0.8}
+          >
+            {loadingSummary
+              ? <ActivityIndicator size="small" color="#4169E1" />
+              : <MaterialIcons name="auto-awesome" size={16} color={activeTab === 'summary' ? "#FFF" : "#4169E1"} />
+            }
+            <Text style={[styles.aiButtonText, activeTab === 'summary' && styles.aiButtonTextActive]}>
+              Resumo IA
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.aiButton, activeTab === 'debate' && styles.aiButtonActive]}
+            onPress={handleDebate}
+            activeOpacity={0.8}
+          >
+            {loadingDebate
+              ? <ActivityIndicator size="small" color="#4169E1" />
+              : <MaterialIcons name="balance" size={16} color={activeTab === 'debate' ? "#FFF" : "#4169E1"} />
+            }
+            <Text style={[styles.aiButtonText, activeTab === 'debate' && styles.aiButtonTextActive]}>
+              Modo Debate
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Painel de Resumo */}
+        {activeTab === 'summary' && (
+          <View style={styles.aiPanel}>
+            <View style={styles.aiPanelHeader}>
+              <MaterialIcons name="auto-awesome" size={16} color="#4169E1" />
+              <Text style={styles.aiPanelTitle}>Resumo gerado por IA</Text>
+            </View>
+            {loadingSummary ? (
+              <View style={{ gap: 8 }}>
+                {[1, 2, 3].map(i => (
+                  <View key={i} style={styles.aiSkeletonLine} />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.aiPanelText}>{aiSummary}</Text>
+            )}
+          </View>
+        )}
+
+        {/* Painel de Debate */}
+        {activeTab === 'debate' && (
+          <View style={{ gap: 12, marginBottom: 20 }}>
+            <View style={[styles.aiPanel, styles.aiPanelFavor]}>
+              <View style={styles.aiPanelHeader}>
+                <MaterialIcons name="thumb-up" size={16} color="#2E7D32" />
+                <Text style={[styles.aiPanelTitle, { color: "#2E7D32" }]}>A favor</Text>
+              </View>
+              {loadingDebate
+                ? <View style={styles.aiSkeletonLine} />
+                : <Text style={styles.aiPanelText}>{debateContent?.favor}</Text>
+              }
+            </View>
+            <View style={[styles.aiPanel, styles.aiPanelContra]}>
+              <View style={styles.aiPanelHeader}>
+                <MaterialIcons name="thumb-down" size={16} color="#C62828" />
+                <Text style={[styles.aiPanelTitle, { color: "#C62828" }]}>Contra</Text>
+              </View>
+              {loadingDebate
+                ? <View style={styles.aiSkeletonLine} />
+                : <Text style={styles.aiPanelText}>{debateContent?.contra}</Text>
+              }
+            </View>
+          </View>
+        )}
 
         <Text style={styles.description}>
           {desc || "Sem descrição disponível."}
@@ -92,8 +230,8 @@ export default function ExploreScreen() {
             {!user
               ? "Faça login para acessar o fórum"
               : existingRoom
-              ? "Entrar no Fórum"
-              : "Criar Sala de Fórum"}
+                ? "Entrar no Fórum"
+                : "Criar Sala de Fórum"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -155,4 +293,70 @@ const styles = StyleSheet.create({
     backgroundColor: "#9DB3E8",
   },
   buttonLabel: { color: "#FFF", fontSize: 16, fontWeight: "700" },
+  aiButtonsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  aiButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#4169E1",
+    backgroundColor: "#FFF",
+  },
+  aiButtonActive: {
+    backgroundColor: "#4169E1",
+  },
+  aiButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#4169E1",
+  },
+  aiButtonTextActive: {
+    color: "#FFF",
+  },
+  aiPanel: {
+    backgroundColor: "#F0F4FF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 3,
+    borderLeftColor: "#4169E1",
+  },
+  aiPanelFavor: {
+    backgroundColor: "#F1F8E9",
+    borderLeftColor: "#2E7D32",
+  },
+  aiPanelContra: {
+    backgroundColor: "#FFEBEE",
+    borderLeftColor: "#C62828",
+  },
+  aiPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  aiPanelTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#4169E1",
+  },
+  aiPanelText: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: "#333",
+  },
+  aiSkeletonLine: {
+    height: 12,
+    backgroundColor: "#DDE3F0",
+    borderRadius: 6,
+    marginBottom: 8,
+  },
 });

@@ -4,15 +4,21 @@ import React from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useAuth } from "../src/context/AuthContext";
 
+const getReputationLevel = (rep: number) => {
+  if (rep >= 500) return { label: "Especialista", color: "#F59E0B", icon: "emoji-events" };
+  if (rep >= 200) return { label: "Veterano", color: "#8B5CF6", icon: "military-tech" };
+  if (rep >= 100) return { label: "Colaborador", color: "#3B82F6", icon: "star" };
+  if (rep >= 30) return { label: "Ativo", color: "#10B981", icon: "thumb-up" };
+  return { label: "Novato", color: "#6B7280", icon: "person" };
+};
+
 export default function ProfileScreen() {
   const { user, signOut, loading } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
-  // Verificar autenticação quando a tela ganhar foco
   useFocusEffect(
     React.useCallback(() => {
       if (!loading && !user) {
-        // Usar setTimeout para garantir que a navegação acontece após o render
         const timer = setTimeout(() => {
           router.replace("/login");
         }, 100);
@@ -26,26 +32,26 @@ export default function ProfileScreen() {
       "Sair da Conta",
       "Tem certeza que deseja sair da sua conta?",
       [
-        { 
-          text: "Cancelar", 
-          style: "cancel" 
+        {
+          text: "Cancelar",
+          style: "cancel",
         },
-        { 
-          text: "Sair", 
-          style: "destructive", 
+        {
+          text: "Sair",
+          style: "destructive",
           onPress: async () => {
             try {
               setIsLoggingOut(true);
               await signOut();
-              Alert.alert("Logout", "Você saiu da sua conta com sucesso."); 
+              Alert.alert("Logout", "Você saiu da sua conta com sucesso.");
               router.replace("/login");
             } catch (error: any) {
               Alert.alert("Erro", error.message || "Erro ao fazer logout");
             } finally {
               setIsLoggingOut(false);
             }
-          } 
-        }
+          },
+        },
       ]
     );
   };
@@ -64,7 +70,7 @@ export default function ProfileScreen() {
       <View style={styles.containerCenter}>
         <MaterialIcons name="lock" size={60} color="#DDD" />
         <Text style={styles.notLoggedText}>Você não está logado.</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.loginButton}
           onPress={() => router.replace("/login")}
         >
@@ -73,6 +79,9 @@ export default function ProfileScreen() {
       </View>
     );
   }
+
+  const rep = user.reputation ?? 0;
+  const level = getReputationLevel(rep);
 
   return (
     <View style={styles.container}>
@@ -93,6 +102,30 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.infoSection}>
+        {/* Reputation Card */}
+        <View style={styles.reputationCard}>
+          <View style={[styles.repIconBox, { backgroundColor: level.color + '22' }]}>
+            <MaterialIcons name={level.icon as any} size={28} color={level.color} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 14 }}>
+            <Text style={styles.repLabel}>Reputação</Text>
+            <Text style={[styles.repValue, { color: level.color }]}>
+              {rep} pts · {level.label}
+            </Text>
+            <View style={styles.repBar}>
+              <View
+                style={[
+                  styles.repBarFill,
+                  {
+                    width: `${Math.min((rep % 500) / 500 * 100, 100)}%` as any,
+                    backgroundColor: level.color,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
+
         <View style={styles.infoCard}>
           <MaterialIcons name="verified-user" size={24} color="#4169E1" />
           <View style={styles.infoContent}>
@@ -112,8 +145,8 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <TouchableOpacity 
-        style={styles.logoutItem} 
+      <TouchableOpacity
+        style={styles.logoutItem}
         onPress={handleLogout}
         disabled={isLoggingOut}
       >
@@ -136,13 +169,13 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#F8F9FA" 
+  container: {
+    flex: 1,
+    backgroundColor: "#F8F9FA",
   },
-  containerCenter: { 
-    flex: 1, 
-    justifyContent: 'center', 
+  containerCenter: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: "#F8F9FA",
   },
@@ -157,45 +190,45 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 10,
   },
-  header: { 
-    paddingTop: 50, 
+  header: {
+    paddingTop: 50,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
-  backButton: { 
+  backButton: {
     padding: 8,
   },
-  profileSection: { 
-    alignItems: "center", 
-    padding: 40, 
+  profileSection: {
+    alignItems: "center",
+    padding: 40,
     backgroundColor: "#FFF",
     marginHorizontal: 20,
     marginTop: 10,
     borderRadius: 20,
     elevation: 2,
   },
-  avatarLarge: { 
-    width: 100, 
-    height: 100, 
-    borderRadius: 50, 
-    backgroundColor: "#4169E1", 
-    justifyContent: 'center', 
+  avatarLarge: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#4169E1",
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
   },
-  avatarText: { 
-    color: '#FFF', 
-    fontSize: 40, 
-    fontWeight: 'bold' 
+  avatarText: {
+    color: '#FFF',
+    fontSize: 40,
+    fontWeight: 'bold',
   },
-  userName: { 
-    fontSize: 24, 
-    fontWeight: "800", 
+  userName: {
+    fontSize: 24,
+    fontWeight: "800",
     color: "#212529",
     marginBottom: 4,
   },
-  userEmail: { 
-    color: "#666", 
+  userEmail: {
+    color: "#666",
     fontSize: 14,
     marginBottom: 4,
   },
@@ -244,9 +277,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#212529",
   },
-  logoutItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  logoutItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 20,
     marginHorizontal: 20,
     marginTop: 20,
@@ -254,10 +287,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     elevation: 1,
   },
-  logoutText: { 
-    marginLeft: 15, 
-    fontSize: 16, 
-    color: "#E63946", 
+  logoutText: {
+    marginLeft: 15,
+    fontSize: 16,
+    color: "#E63946",
     fontWeight: 'bold',
     flex: 1,
   },
@@ -270,5 +303,40 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     color: "#999",
+  },
+  reputationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 16,
+    elevation: 2,
+    marginBottom: 12,
+  },
+  repIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  repLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 2,
+  },
+  repValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  repBar: {
+    height: 4,
+    backgroundColor: "#F0F0F0",
+    borderRadius: 2,
+  },
+  repBarFill: {
+    height: 4,
+    borderRadius: 2,
   },
 });

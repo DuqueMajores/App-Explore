@@ -6,7 +6,6 @@ import {
   KeyboardAvoidingView,
   Linking,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,12 +16,6 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, router } from "expo-router";
 import { useForum, ForumComment } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
-
-interface ThreadedComment {
-  comment: ForumComment;
-  depth: number;
-  children: ForumComment[];
-}
 
 function ArticleHeader({
   title,
@@ -69,17 +62,23 @@ function ArticleHeader({
   );
 }
 
+interface CommentCardProps {
+  comment: ForumComment;
+  depth: number;
+  isRoot: boolean;
+  onReply: (c: ForumComment) => void;
+  onLike: (commentId: string) => void;
+  currentUserEmail?: string;
+}
+
 function CommentCard({
   comment,
   depth,
   isRoot,
   onReply,
-}: {
-  comment: ForumComment;
-  depth: number;
-  isRoot: boolean;
-  onReply: (c: ForumComment) => void;
-}) {
+  onLike,
+  currentUserEmail,
+}: CommentCardProps) {
   return (
     <View
       style={[
@@ -110,18 +109,36 @@ function CommentCard({
           </Text>
         </View>
       </View>
+
       <Text style={[styles.commentText, isRoot && styles.commentTextRoot]}>
         {comment.text}
       </Text>
-      {!isRoot && (
+
+      <View style={styles.commentActions}>
+        {!isRoot && (
+          <TouchableOpacity
+            style={styles.replyButton}
+            onPress={() => onReply(comment)}
+          >
+            <MaterialIcons name="reply" size={16} color="#4169E1" />
+            <Text style={styles.replyButtonText}>Responder</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
-          style={styles.replyButton}
-          onPress={() => onReply(comment)}
+          style={styles.likeButton}
+          onPress={() => onLike(comment.id)}
+          disabled={comment.userEmail === currentUserEmail}
         >
-          <MaterialIcons name="reply" size={16} color="#4169E1" />
-          <Text style={styles.replyButtonText}>Responder</Text>
+          <MaterialIcons
+            name={comment.likes?.includes(currentUserEmail ?? '') ? "favorite" : "favorite-border"}
+            size={16}
+            color={comment.likes?.includes(currentUserEmail ?? '') ? "#E63946" : "#999"}
+          />
+          {comment.likes?.length > 0 && (
+            <Text style={styles.likeCount}>{comment.likes.length}</Text>
+          )}
         </TouchableOpacity>
-      )}
+      </View>
     </View>
   );
 }
@@ -132,15 +149,18 @@ function CommentWithReplies({
   depth,
   isRoot,
   onReply,
+  onLike,
+  currentUserEmail,
 }: {
   comment: ForumComment;
   allComments: ForumComment[];
   depth: number;
   isRoot: boolean;
   onReply: (c: ForumComment) => void;
+  onLike: (commentId: string) => void;
+  currentUserEmail?: string;
 }) {
   const [showReplies, setShowReplies] = useState(false);
-
   const directReplies = allComments.filter((c) => c.parentId === comment.id);
 
   return (
@@ -150,6 +170,8 @@ function CommentWithReplies({
         depth={depth}
         isRoot={isRoot}
         onReply={onReply}
+        onLike={onLike}
+        currentUserEmail={currentUserEmail}
       />
 
       {directReplies.length > 0 && (
@@ -179,6 +201,8 @@ function CommentWithReplies({
             depth={depth + 1}
             isRoot={false}
             onReply={onReply}
+            onLike={onLike}
+            currentUserEmail={currentUserEmail}
           />
         ))}
     </View>
@@ -187,14 +211,26 @@ function CommentWithReplies({
 
 export default function ForumRoomScreen() {
   const { roomId } = useLocalSearchParams<{ roomId?: string }>();
-  const { rooms, addComment, deleteRoom } = useForum();
-  const { user } = useAuth();
+  const { rooms, addComment, deleteRoom, toggleLike } = useForum();
+  const { user, addReputation } = useAuth();
   const [text, setText] = useState("");
   const [replyingTo, setReplyingTo] = useState<ForumComment | null>(null);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   const room = rooms.find((r) => r.id === roomId);
+
+  const handleLike = useCallback(async (commentId: string) => {
+    if (!user || !room) return;
+    const { wasLiked, commentOwnerEmail } = await toggleLike(room.id, commentId, user.email);
+    if (commentOwnerEmail && commentOwnerEmail !== user.email) {
+      await addReputation(
+        commentOwnerEmail,
+        wasLiked ? -5 : 5,
+        wasLiked ? "Curtida removida" : "Comentário curtido"
+      );
+    }
+  }, [user, room, toggleLike, addReputation]);
 
   const handleDeleteRoom = useCallback(() => {
     Alert.alert(
@@ -257,7 +293,9 @@ export default function ForumRoomScreen() {
     (c) => c.parentId === null && c.id !== rootComment?.id
   );
 
-  const listData: Array<{ type: "header" } | { type: "root" } | { type: "comment"; comment: ForumComment }> = [
+  const listData: Array<
+    { type: "header" } | { type: "root" } | { type: "comment"; comment: ForumComment }
+  > = [
     { type: "header" },
     ...(rootComment ? [{ type: "root" as const }] : []),
     ...topLevelComments.map((c) => ({ type: "comment" as const, comment: c })),
@@ -267,7 +305,7 @@ export default function ForumRoomScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      keyboardVerticalOffset={0}
     >
       {/* Fixed Header */}
       <View style={styles.header}>
@@ -320,6 +358,8 @@ export default function ForumRoomScreen() {
                 depth={0}
                 isRoot={true}
                 onReply={setReplyingTo}
+                onLike={handleLike}
+                currentUserEmail={user?.email}
               />
             );
           }
@@ -333,6 +373,8 @@ export default function ForumRoomScreen() {
                   depth={0}
                   isRoot={false}
                   onReply={setReplyingTo}
+                  onLike={handleLike}
+                  currentUserEmail={user?.email}
                 />
               </View>
             );
@@ -340,7 +382,6 @@ export default function ForumRoomScreen() {
 
           return null;
         }}
-        ListEmptyComponent={null}
         ListFooterComponent={
           room.comments.length === 0 ? (
             <View style={styles.emptyComments}>
@@ -583,17 +624,31 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: "#212529",
   },
-  replyButton: {
+  commentActions: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 8,
-    alignSelf: "flex-start",
+    gap: 12,
+  },
+  replyButton: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   replyButtonText: {
     fontSize: 13,
     color: "#4169E1",
     fontWeight: "600",
     marginLeft: 4,
+  },
+  likeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  likeCount: {
+    fontSize: 13,
+    color: "#999",
+    fontWeight: "600",
   },
   showRepliesButton: {
     flexDirection: "row",

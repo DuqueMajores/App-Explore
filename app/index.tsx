@@ -29,6 +29,33 @@ type Article = {
   urlToImage?: string | null;
 };
 
+// ── Skeleton
+const SkeletonPulse = ({ style }: { style: any }) => {
+  const anim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [anim]);
+
+  return <Animated.View style={[style, { opacity: anim }]} />;
+};
+
+const SkeletonCard = () => (
+  <View style={styles.card}>
+    <SkeletonPulse style={styles.skeletonImage} />
+    <View style={{ padding: 16, gap: 8 }}>
+      <SkeletonPulse style={styles.skeletonLine} />
+      <SkeletonPulse style={[styles.skeletonLine, { width: "90%" }]} />
+      <SkeletonPulse style={[styles.skeletonLine, { width: "50%", marginTop: 4 }]} />
+    </View>
+  </View>
+);
+
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const [search, setSearch] = useState("");
@@ -255,7 +282,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          !loadingArticles ? (
+          loadingArticles ? (
+            <View style={styles.emptyState}>
+              {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
+            </View>
+          ) : (
             <View style={styles.emptyState}>
               <MaterialIcons name="newspaper" size={60} color="#DDD" />
               <Text style={styles.emptyStateText}>Nenhuma notícia encontrada</Text>
@@ -263,7 +294,7 @@ export default function HomeScreen() {
                 Tente buscar por um termo diferente
               </Text>
             </View>
-          ) : null
+          )
         }
       />
     </View>
@@ -412,5 +443,17 @@ const styles = StyleSheet.create({
   cardDate: {
     fontSize: 12,
     color: "#999",
+  },
+  skeletonImage: {
+    width: "100%",
+    height: 200,
+    backgroundColor: "#E0E0E0",
+    borderRadius: 0,
+  },
+  skeletonLine: {
+    height: 14,
+    backgroundColor: "#E0E0E0",
+    borderRadius: 8,
+    width: "100%",
   },
 });
