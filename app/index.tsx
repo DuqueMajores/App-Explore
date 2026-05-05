@@ -168,6 +168,16 @@ export default function HomeScreen() {
           style={styles.menuOption}
           onPress={() => {
             toggleMenu();
+            router.push("/forum");
+          }}
+        >
+          <MaterialIcons name="forum" size={22} color="#4169E1" />
+          <Text style={styles.menuOptionText}>Forum</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.menuOption}
+          onPress={() => {
+            toggleMenu();
             router.push("/");
           }}
         >

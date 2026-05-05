@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   Image,
   Linking,
@@ -8,6 +8,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
+import { useForum } from "../src/context/ForumContext";
+import { useAuth } from "../src/context/AuthContext";
 
 export default function ExploreScreen() {
   const { title, desc, image, author, source, url } = useLocalSearchParams<{
@@ -24,6 +27,27 @@ export default function ExploreScreen() {
     typeof image === "string" && image
       ? image
       : "https://via.placeholder.com/400x200";
+
+  const { getRoomByArticleUrl, createRoom } = useForum();
+  const { user } = useAuth();
+  const router = useRouter();
+  const existingRoom = getRoomByArticleUrl(articleUrl);
+
+  const handleForumPress = async () => {
+    if (!user) return;
+    if (existingRoom) {
+      router.push(`/forum-room?roomId=${existingRoom.id}`);
+    } else {
+      const newRoom = await createRoom(
+        title || "Sem título",
+        articleUrl,
+        user.email || "",
+        imageUrl,
+        desc || ""
+      );
+      router.push(`/forum-room?roomId=${newRoom.id}`);
+    }
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -55,6 +79,22 @@ export default function ExploreScreen() {
           }}
         >
           <Text style={styles.buttonLabel}>Ler artigo completo</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          disabled={!user}
+          style={[styles.forumButton, !user && styles.forumButtonDisabled]}
+          onPress={handleForumPress}
+        >
+          <MaterialIcons name="forum" size={20} color="#FFF" style={{ marginRight: 8 }} />
+          <Text style={styles.buttonLabel}>
+            {!user
+              ? "Faça login para acessar o fórum"
+              : existingRoom
+              ? "Entrar no Fórum"
+              : "Criar Sala de Fórum"}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -100,7 +140,19 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 16,
     alignItems: "center",
+    marginBottom: 12,
+  },
+  forumButton: {
+    backgroundColor: "#4169E1",
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: "center",
     marginBottom: 50,
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  forumButtonDisabled: {
+    backgroundColor: "#9DB3E8",
   },
   buttonLabel: { color: "#FFF", fontSize: 16, fontWeight: "700" },
 });
