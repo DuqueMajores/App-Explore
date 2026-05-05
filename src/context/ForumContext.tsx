@@ -38,6 +38,7 @@ interface ForumContextData {
     userEmail: string,
     parentId: string | null
   ) => Promise<void>;
+  deleteRoom: (roomId: string) => Promise<void>;  // ← NOVO
 }
 
 const STORAGE_KEY = '@Forum:rooms';
@@ -125,8 +126,14 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await persistRooms(updatedRooms);
   }, [rooms, persistRooms]);
 
+  const deleteRoom = useCallback(async (roomId: string): Promise<void> => {
+    const updatedRooms = rooms.filter(room => room.id !== roomId);
+    setRooms(updatedRooms);
+    await persistRooms(updatedRooms);
+  }, [rooms, persistRooms]);
+
   return (
-    <ForumContext.Provider value={{ rooms, getRoomByArticleUrl, createRoom, addComment }}>
+    <ForumContext.Provider value={{ rooms, getRoomByArticleUrl, createRoom, addComment, deleteRoom }}>
       {children}
     </ForumContext.Provider>
   );

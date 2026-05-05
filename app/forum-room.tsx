@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from "react";
 import {
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -17,14 +18,11 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useForum, ForumComment } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
 interface ThreadedComment {
   comment: ForumComment;
   depth: number;
   children: ForumComment[];
 }
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
 
 function ArticleHeader({
   title,
@@ -187,11 +185,9 @@ function CommentWithReplies({
   );
 }
 
-// ─── Main Screen ─────────────────────────────────────────────────────────────
-
 export default function ForumRoomScreen() {
   const { roomId } = useLocalSearchParams<{ roomId?: string }>();
-  const { rooms, addComment } = useForum();
+  const { rooms, addComment, deleteRoom } = useForum();
   const { user } = useAuth();
   const [text, setText] = useState("");
   const [replyingTo, setReplyingTo] = useState<ForumComment | null>(null);
@@ -199,6 +195,24 @@ export default function ForumRoomScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   const room = rooms.find((r) => r.id === roomId);
+
+  const handleDeleteRoom = useCallback(() => {
+    Alert.alert(
+      "Excluir Sala",
+      "Tem certeza que deseja excluir esta sala? Todos os comentários serão perdidos.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            await deleteRoom(room!.id);
+            router.replace("/forum");
+          },
+        },
+      ]
+    );
+  }, [deleteRoom, room]);
 
   const handleSend = useCallback(async () => {
     if (!text.trim() || !user || !room || sending) return;
@@ -234,12 +248,11 @@ export default function ForumRoomScreen() {
     );
   }
 
-  // The root comment is the first comment ever posted (by room creator)
   const sortedComments = [...room.comments].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
   const rootComment = sortedComments.find((c) => c.parentId === null) ?? null;
-  // Top-level non-root comments (direct replies to null parent, excluding root)
+
   const topLevelComments = sortedComments.filter(
     (c) => c.parentId === null && c.id !== rootComment?.id
   );
@@ -269,7 +282,13 @@ export default function ForumRoomScreen() {
             {room.articleTitle}
           </Text>
         </View>
-        <View style={{ width: 40 }} />
+        {user?.email === room?.createdBy ? (
+          <TouchableOpacity onPress={handleDeleteRoom} style={styles.deleteButton}>
+            <MaterialIcons name="delete-outline" size={24} color="#E63946" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       {/* Scrollable Content */}
@@ -655,5 +674,13 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  deleteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#FFF5F5",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
