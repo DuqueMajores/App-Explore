@@ -16,6 +16,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, router } from "expo-router";
 import { useForum, ForumComment } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
+import { useRouter } from "expo-router";
 
 function ArticleHeader({
   title,
@@ -222,8 +223,8 @@ export default function ForumRoomScreen() {
   const [replyingTo, setReplyingTo] = useState<ForumComment | null>(null);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-
   const room = rooms.find((r) => r.id === roomId);
+  const router = useRouter();
 
   const handleLike = useCallback(async (commentId: string) => {
     if (!user || !room) return;
@@ -757,3 +758,13 @@ const styles = StyleSheet.create({
 </TouchableOpacity>
 
 """Para o Dark Mode funcionar em todas as telas, você deve passar o estilo isDark && styles.darkBg para a View principal de cada arquivo."""
+
+import { useRouter } from "expo-router";
+
+const router = useRouter();
+
+<Text
+  onPress={() => router.push(`/perfil?userId=${item.userId}`)}
+>
+  {item.username}
+</Text>

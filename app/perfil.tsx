@@ -15,13 +15,14 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../src/context/AuthContext";
+import * as ImagePicker from "expo-image-picker";
 
 const PRESET_AVATARS = [
   'https://cdn-icons-png.flaticon.com/512/6840/6840478.png', // Ex: Personagem 1
   'https://cdn-icons-png.flaticon.com/512/6840/6840422.png', // Ex: Personagem 2
 ];
 
-export default function ProfileScreen() 
+export default function ProfileScreen()
 export default function HomeScreen() {
   const { user, toggleTTS } = useAuth();
   const [showMostLiked, setShowMostLiked] = useState(true);
@@ -41,6 +42,9 @@ export default function HomeScreen() {
     if (!user?.ttsEnabled) Speech.speak(msg, { language: 'pt-BR' });
   };
 
+  const [likes, setLikes] = useState(0);
+  const [dislikes, setDislikes] = useState(0);
+
   return (
     <View style={[styles.container, user?.darkMode && styles.darkBg]}>
       {/* Sistema de Anúncio Discreto */}
@@ -55,10 +59,10 @@ export default function HomeScreen() {
           <Text style={styles.headerTitle}>Explore</Text>
         </View>
         <TouchableOpacity onPress={toggleTheme}>
-             <MaterialIcons name={user?.darkMode ? "light-mode" : "dark-mode"} size={24} color="#4169E1" />
+          <MaterialIcons name={user?.darkMode ? "light-mode" : "dark-mode"} size={24} color="#4169E1" />
         </TouchableOpacity>
       </View>
-      
+
       {/* ... Restante da FlatList usando displayedArticles ... */}
     </View>
   );
@@ -71,7 +75,7 @@ const styles = StyleSheet.create({
   darkBg: { backgroundColor: '#121212' },
   adBanner: { height: 50, backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center', marginVertical: 10, borderRadius: 8 },
   adText: { fontSize: 10, color: '#999' }
-});{
+}); {
   const { user, signOut, updateProfile, loading } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -121,15 +125,27 @@ const styles = StyleSheet.create({
     setPhotoPreviewError(false);
   };
 
+  const avatars = [
+    require("../assets/avatar1.png"),
+    require("../assets/avatar2.png"),
+  ];
+
+  {
+    avatars.map((a, i) => (
+      <TouchableOpacity key={i} onPress={() => setImage(a)}>
+        <Image source={a} style={{ width: 50, height: 50 }} />
+      </TouchableOpacity>
+    ))
+  }
+
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
+      quality: 1,
     });
+
     if (!result.canceled) {
-      setEditPhotoUrl(result.assets[0].uri);
+      setImage(result.assets[0].uri);
     }
   };
 
@@ -296,7 +312,7 @@ return (
       transparent
       onRequestClose={() => !isSaving && setEditModalVisible(false)}
     >
-    <ScrollView style={user?.darkMode && styles.darkBg}>
+      <ScrollView style={user?.darkMode && styles.darkBg}>
         <View style={styles.profileSection}>
           <Image source={{ uri: user.photo }} style={styles.avatarImage} />
           <Text style={styles.userName}>{user.name}</Text>
@@ -323,7 +339,7 @@ return (
             </TouchableOpacity>
           ))}
         </ScrollView>
-    </ScrollView> 
+      </ScrollView>
       );
       }
 
@@ -742,7 +758,7 @@ export default function ProfileScreen() {
             <MaterialIcons name="thumb-up" size={24} color={user?.likes.includes(user.email) ? "#4169E1" : "#999"} />
           </TouchableOpacity>
           <Text style={[styles.count, isDark && styles.darkText]}>{user?.likes.length}</Text>
-          
+
           <TouchableOpacity onPress={() => handleProfileReaction(user!.email, 'dislike')}>
             <MaterialIcons name="thumb-down" size={24} color={user?.dislikes.includes(user.email) ? "#E63946" : "#999"} />
           </TouchableOpacity>
@@ -756,12 +772,12 @@ export default function ProfileScreen() {
       <Modal visible={modalVisible} animationType="slide">
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>Editar Perfil</Text>
-          
+
           <Image source={{ uri: tempPhoto || 'https://via.placeholder.com/100' }} style={styles.previewAvatar} />
-          
+
           <TouchableOpacity style={styles.galleryBtn} onPress={pickFromGallery}>
             <MaterialIcons name="photo-library" size={20} color="#FFF" />
-            <Text style={{color: '#FFF', marginLeft: 10}}>Galeria</Text>
+            <Text style={{ color: '#FFF', marginLeft: 10 }}>Galeria</Text>
           </TouchableOpacity>
 
           <Text style={styles.label}>Escolha um Personagem:</Text>
@@ -774,8 +790,8 @@ export default function ProfileScreen() {
           </View>
 
           <TextInput style={styles.input} value={tempName} onChangeText={setTempName} placeholder="Nome" />
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={{color: '#FFF'}}>Salvar</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setModalVisible(false)}><Text style={{marginTop: 15}}>Cancelar</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}><Text style={{ color: '#FFF' }}>Salvar</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setModalVisible(false)}><Text style={{ marginTop: 15 }}>Cancelar</Text></TouchableOpacity>
         </View>
       </Modal>
     </ScrollView>
@@ -804,3 +820,15 @@ const styles = StyleSheet.create({
   input: { width: '100%', borderWidth: 1, borderColor: '#DDD', padding: 12, borderRadius: 8, marginBottom: 20 },
   saveBtn: { backgroundColor: "#4169E1", width: '100%', padding: 15, borderRadius: 12, alignItems: 'center' }
 });
+
+
+const [likes, setLikes] = useState(0);
+const [dislikes, setDislikes] = useState(0);
+
+<View style={{ flexDirection: "row" }}>
+  <Button title="👍" onPress={() => setLikes(likes + 1)} />
+  <Text>{likes}</Text>
+
+  <Button title="👎" onPress={() => setDislikes(dislikes + 1)} />
+  <Text>{dislikes}</Text>
+</View>
