@@ -1,25 +1,18 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface ReputationEvent {
-  points: number;
-  reason: string;
-  createdAt: string;
-}
-
 interface User {
   name: string;
   email: string;
-  reputation: number;
-  reputationHistory: ReputationEvent[];
+  photo?: string;
+  likes: string[]; // Lista de e-mails de quem curtiu este perfil
+  dislikes: string[];
+  ttsEnabled: boolean;
+  darkMode: boolean;
 }
 
-interface StoredUser {
-  name: string;
-  email: string;
+interface StoredUser extends User {
   passwordHash: string;
-  reputation: number;
-  reputationHistory: ReputationEvent[];
 }
 
 interface AuthContextData {
@@ -27,142 +20,202 @@ interface AuthContextData {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  addReputation: (targetEmail: string, points: number, reason: string) => Promise<void>;
+  updateProfile: (name: string, photo?: string) => Promise<void>;
+  toggleTTS: () => Promise<void>;
+  toggleTheme: () => Promise<void>;
+  handleProfileReaction: (targetEmail: string, type: 'like' | 'dislike') => Promise<void>;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
-
-const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-const validatePassword = (password: string) => password.length >= 6;
-const validateName = (name: string) => name.trim().length >= 2;
-
-const hashPassword = (password: string): string => {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString(16);
-};
-
-const verifyPassword = (password: string, hash: string) => hashPassword(password) === hash;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadStorageData() {
-      try {
-        const storageUser = await AsyncStorage.getItem('@App:user');
-        if (storageUser) {
-          const userData = JSON.parse(storageUser);
-          setUser({
-            name: userData.name,
-            email: userData.email,
-            reputation: userData.reputation ?? 0,
-            reputationHistory: userData.reputationHistory ?? [],
-          });
-        }
-      } catch (error) {
-        console.error('Erro ao carregar dados do usuário:', error);
-      } finally {
-        setLoading(false);
-      }
+    async function loadData() {
+      const storageUser = await AsyncStorage.getItem('@App:user');
+      if (storageUser) setUser(JSON.parse(storageUser));
+      setLoading(false);
     }
-    loadStorageData();
+    loadData();
   }, []);
 
-  async function signIn(email: string, password: string) {
-    if (!email || !password) throw new Error('Email e senha são obrigatórios.');
-    if (!validateEmail(email)) throw new Error('Por favor, insira um email válido.');
-    if (!validatePassword(password)) throw new Error('A senha deve ter no mínimo 6 caracteres.');
-
-    const allUsers = await AsyncStorage.getItem('@App:users');
-    const users: StoredUser[] = allUsers ? JSON.parse(allUsers) : [];
-    const foundUser = users.find(u => u.email === email);
-    if (!foundUser) throw new Error('Email ou senha incorretos.');
-    if (!verifyPassword(password, foundUser.passwordHash)) throw new Error('Email ou senha incorretos.');
-
-    const userData: User = {
-      name: foundUser.name,
-      email: foundUser.email,
-      reputation: foundUser.reputation ?? 0,
-      reputationHistory: foundUser.reputationHistory ?? [],
-    };
-    await AsyncStorage.setItem('@App:user', JSON.stringify(userData));
+  const saveAndSetUser = async (userData: User) => {
     setUser(userData);
+    await AsyncStorage.setItem('@App:user', JSON.stringify(userData));
+    // Atualizar na lista global de usuários
+    const all = await AsyncStorage.getItem('@App:users');
+    const users: StoredUser[] = all ? JSON.parse(all) : [];
+    const updated = users.map(u => u.email === userData.email ? { ...u, ...userData } : u);
+    await AsyncStorage.setItem('@App:users', JSON.stringify(updated));
+  };
+
+  async function signIn(email: string, password: string) {
+    const all = await AsyncStorage.getItem('@App:users');
+    const users: StoredUser[] = all ? JSON.parse(all) : [];
+    const found = users.find(u => u.email === email);
+    if (!found) throw new Error('Usuário não encontrado');
+    const userData = { ...found };
+    // @ts-ignore (removendo passwordHash antes de salvar no estado)
+    delete userData.passwordHash;
+    await saveAndSetUser(userData);
   }
 
   async function signUp(name: string, email: string, password: string) {
-    if (!name || !email || !password) throw new Error('Todos os campos são obrigatórios.');
-    if (!validateName(name)) throw new Error('O nome deve ter no mínimo 2 caracteres.');
-    if (!validateEmail(email)) throw new Error('Por favor, insira um email válido.');
-    if (!validatePassword(password)) throw new Error('A senha deve ter no mínimo 6 caracteres.');
-
-    const allUsers = await AsyncStorage.getItem('@App:users');
-    const users: StoredUser[] = allUsers ? JSON.parse(allUsers) : [];
-    if (users.some(u => u.email === email)) throw new Error('Este email já está cadastrado.');
-
     const newUser: StoredUser = {
-      name, email,
-      passwordHash: hashPassword(password),
-      reputation: 0,
-      reputationHistory: [],
+      name, email, photo: '', likes: [], dislikes: [], 
+      ttsEnabled: false, darkMode: false, passwordHash: 'hash_ficticio'
     };
+    const all = await AsyncStorage.getItem('@App:users');
+    const users = all ? JSON.parse(all) : [];
     users.push(newUser);
     await AsyncStorage.setItem('@App:users', JSON.stringify(users));
-
-    const userData: User = { name, email, reputation: 0, reputationHistory: [] };
-    await AsyncStorage.setItem('@App:user', JSON.stringify(userData));
-    setUser(userData);
+    await saveAndSetUser(newUser);
   }
 
-  async function signOut() {
-    await AsyncStorage.removeItem('@App:user');
-    setUser(null);
-  }
+  const toggleTTS = async () => { if (user) await saveAndSetUser({ ...user, ttsEnabled: !user.ttsEnabled }); };
+  const toggleTheme = async () => { if (user) await saveAndSetUser({ ...user, darkMode: !user.darkMode }); };
 
-  // Adiciona reputação a QUALQUER usuário pelo email (quem recebeu a curtida, por exemplo)
-  async function addReputation(targetEmail: string, points: number, reason: string) {
-    const event: ReputationEvent = { points, reason, createdAt: new Date().toISOString() };
-
-    // Atualiza na lista global de usuários
-    const allUsers = await AsyncStorage.getItem('@App:users');
-    const users: StoredUser[] = allUsers ? JSON.parse(allUsers) : [];
-    const updatedUsers = users.map(u => {
+  const handleProfileReaction = async (targetEmail: string, type: 'like' | 'dislike') => {
+    const all = await AsyncStorage.getItem('@App:users');
+    let users: StoredUser[] = all ? JSON.parse(all) : [];
+    const updated = users.map(u => {
       if (u.email !== targetEmail) return u;
-      return {
-        ...u,
-        reputation: (u.reputation ?? 0) + points,
-        reputationHistory: [...(u.reputationHistory ?? []), event],
-      };
+      const list = type === 'like' ? u.likes : u.dislikes;
+      const filtered = list.includes(user!.email) ? list.filter(e => e !== user!.email) : [...list, user!.email];
+      return type === 'like' ? { ...u, likes: filtered } : { ...u, dislikes: filtered };
     });
-    await AsyncStorage.setItem('@App:users', JSON.stringify(updatedUsers));
-
-    // Se for o usuário logado, atualiza o estado também
-    if (user && user.email === targetEmail) {
-      const updatedUser: User = {
-        ...user,
-        reputation: user.reputation + points,
-        reputationHistory: [...user.reputationHistory, event],
-      };
-      await AsyncStorage.setItem('@App:user', JSON.stringify(updatedUser));
-      setUser(updatedUser);
+    await AsyncStorage.setItem('@App:users', JSON.stringify(updated));
+    if (targetEmail === user?.email) {
+      const currentUpdate = updated.find(u => u.email === user.email);
+      if (currentUpdate) setUser(currentUpdate);
     }
+  };
+
+  async function updateProfile(name: string, photo?: string) {
+    if (user) await saveAndSetUser({ ...user, name, photo: photo ?? user.photo });
   }
+
+  async function signOut() { await AsyncStorage.removeItem('@App:user'); setUser(null); }
 
   return (
-    <AuthContext.Provider value={{ user, signIn, signUp, signOut, addReputation, loading }}>
+    <AuthContext.Provider value={{ user, signIn, signUp, signOut, updateProfile, toggleTTS, toggleTheme, handleProfileReaction, loading }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth deve ser usado dentro de um AuthProvider');
-  return context;
+export const useAuth = () => useContext(AuthContext);
+
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+interface User {
+  name: string;
+  email: string;
+  photo?: string;
+  likes: string[]; // Lista de e-mails de quem curtiu este perfil
+  dislikes: string[];
+  ttsEnabled: boolean;
+  darkMode: boolean;
 }
+
+interface StoredUser extends User {
+  passwordHash: string;
+}
+
+interface AuthContextData {
+  user: User | null;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (name: string, email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  updateProfile: (name: string, photo?: string) => Promise<void>;
+  toggleTTS: () => Promise<void>;
+  toggleTheme: () => Promise<void>;
+  handleProfileReaction: (targetEmail: string, type: 'like' | 'dislike') => Promise<void>;
+  loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextData>({} as AuthContextData);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      const storageUser = await AsyncStorage.getItem('@App:user');
+      if (storageUser) setUser(JSON.parse(storageUser));
+      setLoading(false);
+    }
+    loadData();
+  }, []);
+
+  const saveAndSetUser = async (userData: User) => {
+    setUser(userData);
+    await AsyncStorage.setItem('@App:user', JSON.stringify(userData));
+    // Atualizar na lista global de usuários
+    const all = await AsyncStorage.getItem('@App:users');
+    const users: StoredUser[] = all ? JSON.parse(all) : [];
+    const updated = users.map(u => u.email === userData.email ? { ...u, ...userData } : u);
+    await AsyncStorage.setItem('@App:users', JSON.stringify(updated));
+  };
+
+  async function signIn(email: string, password: string) {
+    const all = await AsyncStorage.getItem('@App:users');
+    const users: StoredUser[] = all ? JSON.parse(all) : [];
+    const found = users.find(u => u.email === email);
+    if (!found) throw new Error('Usuário não encontrado');
+    const userData = { ...found };
+    // @ts-ignore (removendo passwordHash antes de salvar no estado)
+    delete userData.passwordHash;
+    await saveAndSetUser(userData);
+  }
+
+  async function signUp(name: string, email: string, password: string) {
+    const newUser: StoredUser = {
+      name, email, photo: '', likes: [], dislikes: [], 
+      ttsEnabled: false, darkMode: false, passwordHash: 'hash_ficticio'
+    };
+    const all = await AsyncStorage.getItem('@App:users');
+    const users = all ? JSON.parse(all) : [];
+    users.push(newUser);
+    await AsyncStorage.setItem('@App:users', JSON.stringify(users));
+    await saveAndSetUser(newUser);
+  }
+
+  const toggleTTS = async () => { if (user) await saveAndSetUser({ ...user, ttsEnabled: !user.ttsEnabled }); };
+  const toggleTheme = async () => { if (user) await saveAndSetUser({ ...user, darkMode: !user.darkMode }); };
+
+  const handleProfileReaction = async (targetEmail: string, type: 'like' | 'dislike') => {
+    const all = await AsyncStorage.getItem('@App:users');
+    let users: StoredUser[] = all ? JSON.parse(all) : [];
+    const updated = users.map(u => {
+      if (u.email !== targetEmail) return u;
+      const list = type === 'like' ? u.likes : u.dislikes;
+      const filtered = list.includes(user!.email) ? list.filter(e => e !== user!.email) : [...list, user!.email];
+      return type === 'like' ? { ...u, likes: filtered } : { ...u, dislikes: filtered };
+    });
+    await AsyncStorage.setItem('@App:users', JSON.stringify(updated));
+    if (targetEmail === user?.email) {
+      const currentUpdate = updated.find(u => u.email === user.email);
+      if (currentUpdate) setUser(currentUpdate);
+    }
+  };
+
+  async function updateProfile(name: string, photo?: string) {
+    if (user) await saveAndSetUser({ ...user, name, photo: photo ?? user.photo });
+  }
+
+  async function signOut() { await AsyncStorage.removeItem('@App:user'); setUser(null); }
+
+  return (
+    <AuthContext.Provider value={{ user, signIn, signUp, signOut, updateProfile, toggleTTS, toggleTheme, handleProfileReaction, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);

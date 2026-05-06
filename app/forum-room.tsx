@@ -87,6 +87,11 @@ function CommentCard({
         isRoot && styles.commentCardRoot,
       ]}
     >
+      <TouchableOpacity
+        onPress={() => router.push({ pathname: "/perfil", params: { viewUserEmail: comment.userEmail } })}
+      >
+        <Text style={styles.commentUserName}>{comment.userName}</Text>
+      </TouchableOpacity>
       <View style={styles.commentHeader}>
         <View style={[styles.commentAvatar, isRoot && styles.commentAvatarRoot]}>
           <Text style={styles.commentAvatarText}>
@@ -296,10 +301,10 @@ export default function ForumRoomScreen() {
   const listData: Array<
     { type: "header" } | { type: "root" } | { type: "comment"; comment: ForumComment }
   > = [
-    { type: "header" },
-    ...(rootComment ? [{ type: "root" as const }] : []),
-    ...topLevelComments.map((c) => ({ type: "comment" as const, comment: c })),
-  ];
+      { type: "header" },
+      ...(rootComment ? [{ type: "root" as const }] : []),
+      ...topLevelComments.map((c) => ({ type: "comment" as const, comment: c })),
+    ];
 
   return (
     <KeyboardAvoidingView
@@ -739,3 +744,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 });
+
+
+// Substitua o trecho do nome do usuário dentro do CommentCard:
+<TouchableOpacity 
+  onPress={() => router.push({ pathname: "/perfil", params: { viewUserEmail: comment.userEmail } })}
+>
+  <Text style={[styles.commentUserName, isRoot && styles.commentUserNameRoot]}>
+    {comment.userName}
+    {isRoot && <Text style={styles.opBadge}> · OP</Text>}
+  </Text>
+</TouchableOpacity>
+
+"""Para o Dark Mode funcionar em todas as telas, você deve passar o estilo isDark && styles.darkBg para a View principal de cada arquivo."""

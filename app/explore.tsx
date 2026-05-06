@@ -14,6 +14,68 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useForum } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
 
+const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? "";
+const GROQ_MODEL = "llama-3.1-8b-instant";
+
+const groqHeaders = {
+  "Content-Type": "application/json",
+  "Authorization": `Bearer ${GROQ_API_KEY}`,
+};
+
+async function callGroq(content: string, jsonMode = false): Promise<string> {
+  const body: any = {
+    model: GROQ_MODEL,
+    max_tokens: 1000,
+    messages: [{ role: "user", content }],
+  };
+
+  // Ativa o modo JSON nativo do Groq quando pedido
+  if (jsonMode) {
+    body.response_format = { type: "json_object" };
+  }
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: groqHeaders,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    console.error("Groq API error:", response.status, err);
+    throw new Error(`Erro ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
+// Extrai o primeiro objeto JSON encontrado na string, mesmo com texto ao redor
+function extractJson(text: string): { favor: string; contra: string } {
+  // 1. Tenta parsear direto
+  try {
+    return JSON.parse(text.trim());
+  } catch {}
+
+  // 2. Remove blocos de markdown ```json ... ```
+  const stripped = text.replace(/```json[\s\S]*?```|```[\s\S]*?```/g, (match) =>
+    match.replace(/```json|```/g, "")
+  );
+  try {
+    return JSON.parse(stripped.trim());
+  } catch {}
+
+  // 3. Extrai o primeiro { ... } encontrado na resposta
+  const match = text.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch {}
+  }
+
+  throw new Error("Não foi possível extrair JSON da resposta.");
+}
+
 export default function ExploreScreen() {
   const { title, desc, image, author, source, url } = useLocalSearchParams<{
     title?: string;
@@ -62,21 +124,11 @@ export default function ExploreScreen() {
     setLoadingSummary(true);
     setActiveTab('summary');
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: `Resuma esta notícia em exatamente 3 pontos objetivos em português, usando bullet points (•). Seja direto e informativo.\n\nTítulo: ${title}\n\nDescrição: ${desc}`,
-          }],
-        }),
-      });
-      const data = await response.json();
-      setAiSummary(data.content?.[0]?.text ?? "Não foi possível gerar o resumo.");
-    } catch {
+      const text = await callGroq(
+        `Resuma esta notícia em exatamente 3 pontos objetivos em português, usando bullet points (•). Seja direto e informativo.\n\nTítulo: ${title}\n\nDescrição: ${desc}`
+      );
+      setAiSummary(text || "Não foi possível gerar o resumo.");
+    } catch (e: any) {
       setAiSummary("Erro ao conectar com a IA. Tente novamente.");
     } finally {
       setLoadingSummary(false);
@@ -88,24 +140,19 @@ export default function ExploreScreen() {
     setLoadingDebate(true);
     setActiveTab('debate');
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: `Sobre esta notícia, gere dois lados de um debate em português. Retorne APENAS JSON válido, sem markdown, sem texto extra:\n{"favor":"argumento a favor em 2-3 frases","contra":"argumento contra em 2-3 frases"}\n\nTítulo: ${title}\nDescrição: ${desc}`,
-          }],
-        }),
-      });
-      const data = await response.json();
-      const raw = data.content?.[0]?.text ?? '{}';
-      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+      // jsonMode: true força o Groq a retornar JSON puro, sem texto ao redor
+      const text = await callGroq(
+        `Você é um gerador de debates. Sobre a notícia abaixo, gere exatamente dois argumentos em português.\nResponda com um objeto JSON com as chaves "favor" e "contra", cada uma com 2 a 3 frases.\n\nTítulo: ${title}\nDescrição: ${desc}`,
+        true // jsonMode ativado
+      );
+      const parsed = extractJson(text);
       setDebateContent(parsed);
-    } catch {
-      setDebateContent({ favor: "Não foi possível gerar o debate.", contra: "Tente novamente." });
+    } catch (e: any) {
+      console.error("Debate error:", e);
+      setDebateContent({
+        favor: "Não foi possível gerar o debate.",
+        contra: "Tente novamente em instantes.",
+      });
     } finally {
       setLoadingDebate(false);
     }
