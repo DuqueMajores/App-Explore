@@ -39,6 +39,7 @@ export default function RootLayout() {
                   <Stack.Screen name="index" />
                   <Stack.Screen name="login" />
                   <Stack.Screen name="perfil" />
+                  <Stack.Screen name="rede" options={{ title: "Rede" }} />
                   <Stack.Screen name="explore" />
                   <Stack.Screen name="forum" />
                   <Stack.Screen name="forum-room" />

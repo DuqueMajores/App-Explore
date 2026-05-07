@@ -201,6 +201,15 @@ export default function HomeScreen() {
           <MaterialIcons name="account-circle" size={22} color="#4169E1" />
           <Text style={styles.menuOptionText}>Meu Perfil</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuOption}
+          onPress={() => { toggleMenu(); router.push('/rede'); }}
+        >
+          <MaterialIcons name="groups" size={22} color="#4169E1" />
+          <Text style={styles.menuOptionText}>Rede</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.menuOption}
           onPress={() => { toggleMenu(); router.push("/forum"); }}
