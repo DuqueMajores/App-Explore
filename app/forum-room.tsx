@@ -98,11 +98,18 @@ function CommentCard({
             })
           }
         >
-          <View style={[styles.commentAvatar, isRoot && styles.commentAvatarRoot]}>
-            <Text style={styles.commentAvatarText}>
-              {comment.userName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          {comment.userPhoto ? (
+            <Image
+              source={{ uri: comment.userPhoto }}
+              style={[styles.commentAvatar, isRoot && styles.commentAvatarRoot, styles.commentAvatarImg]}
+            />
+          ) : (
+            <View style={[styles.commentAvatar, isRoot && styles.commentAvatarRoot]}>
+              <Text style={styles.commentAvatarText}>
+                {comment.userName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
         <View style={styles.commentHeaderInfo}>
           <TouchableOpacity
@@ -296,6 +303,7 @@ export default function ForumRoomScreen() {
         text.trim(),
         user.name,
         user.email,
+        user.photo ?? undefined,
         replyingTo?.id ?? null
       );
       setText("");
@@ -612,6 +620,7 @@ const styles = StyleSheet.create({
   },
   commentAvatarRoot: { width: 38, height: 38, borderRadius: 19 },
   commentAvatarText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  commentAvatarImg: { borderRadius: 999 },  // faz a Image ficar redonda
   commentHeaderInfo: { flex: 1 },
   commentUserName: { fontSize: 14, fontWeight: "700", color: "#212529" },
   commentUserNameRoot: { fontSize: 15 },

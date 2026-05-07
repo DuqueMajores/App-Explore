@@ -12,6 +12,7 @@ export interface ForumComment {
   text: string;
   userName: string;
   userEmail: string;
+  userPhoto?: string;   // foto de perfil do autor
   createdAt: string;
   parentId: string | null;
   likes: string[]; // array de emails que curtiram
@@ -43,6 +44,7 @@ interface ForumContextData {
     text: string,
     userName: string,
     userEmail: string,
+    userPhoto: string | undefined,
     parentId: string | null
   ) => Promise<void>;
   deleteRoom: (roomId: string) => Promise<void>;
@@ -130,6 +132,7 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({
       text: string,
       userName: string,
       userEmail: string,
+      userPhoto: string | undefined,
       parentId: string | null
     ): Promise<void> => {
       const newComment: ForumComment = {
@@ -137,6 +140,7 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({
         text,
         userName,
         userEmail,
+        userPhoto,
         createdAt: new Date().toISOString(),
         parentId,
         likes: [],

@@ -1,7 +1,8 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
-import React, { useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -17,13 +18,161 @@ import {
 import { useAuth } from "../src/context/AuthContext";
 
 const PRESET_AVATARS = [
-  "https://cdn-icons-png.flaticon.com/512/6840/6840478.png",
-  "https://cdn-icons-png.flaticon.com/512/6840/6840422.png",
-  "https://cdn-icons-png.flaticon.com/512/6840/6840455.png",
+  "https://imagetourl.cloud/usr5cr0j.png",
+  "https://imagetourl.cloud/h62kr4bl.png",
+  "https://imagetourl.cloud/h5m0esya.png",
 ];
 
+interface PublicUser {
+  name: string;
+  email: string;
+  photo?: string;
+  likes: string[];
+  dislikes: string[];
+}
+
+// ── Perfil de outro usuário (somente leitura) ─────────────────────────────────
+function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
+  const { user: loggedUser, handleProfileReaction } = useAuth();
+  const [target, setTarget] = useState<PublicUser | null>(null);
+  const [loadingTarget, setLoadingTarget] = useState(true);
+
+  const loadTarget = async () => {
+    setLoadingTarget(true);
+    try {
+      const all = await AsyncStorage.getItem("@App:users");
+      const users: any[] = all ? JSON.parse(all) : [];
+      const found = users.find((u) => u.email === targetEmail);
+      if (found) {
+        const { passwordHash, ...pub } = found;
+        setTarget(pub as PublicUser);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar usuário:", e);
+    } finally {
+      setLoadingTarget(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTarget();
+  }, [targetEmail]);
+
+  const handleReact = async (type: "like" | "dislike") => {
+    if (!loggedUser) return;
+    await handleProfileReaction(targetEmail, type);
+    await loadTarget();
+  };
+
+  if (loadingTarget) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4169E1" />
+        <Text style={styles.loadingText}>Carregando perfil...</Text>
+      </View>
+    );
+  }
+
+  if (!target) {
+    return (
+      <View style={styles.containerCenter}>
+        <MaterialIcons name="person-off" size={60} color="#DDD" />
+        <Text style={styles.notLoggedText}>Usuário não encontrado.</Text>
+        <TouchableOpacity style={styles.loginButton} onPress={() => router.back()}>
+          <Text style={styles.loginButtonText}>Voltar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const isSelf = loggedUser?.email === target.email;
+  const likedByMe = loggedUser ? (target.likes ?? []).includes(loggedUser.email) : false;
+  const dislikedByMe = loggedUser ? (target.dislikes ?? []).includes(loggedUser.email) : false;
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <MaterialIcons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Perfil</Text>
+        <View style={{ width: 48 }} />
+      </View>
+
+      {/* Avatar + info */}
+      <View style={styles.profileSection}>
+        <View style={styles.avatarWrapper}>
+          {target.photo ? (
+            <Image source={{ uri: target.photo }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarLarge}>
+              <Text style={styles.avatarText}>
+                {target.name.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <Text style={styles.userName}>{target.name}</Text>
+        <Text style={styles.userEmail}>{target.email}</Text>
+
+        {/* Reações */}
+        <View style={styles.reactionContainer}>
+          <TouchableOpacity
+            style={styles.reactionButton}
+            onPress={() => handleReact("like")}
+            disabled={isSelf || !loggedUser}
+          >
+            <MaterialIcons
+              name="thumb-up"
+              size={26}
+              color={likedByMe ? "#4169E1" : "#CCC"}
+            />
+          </TouchableOpacity>
+          <Text style={styles.reactionCount}>{target.likes?.length ?? 0}</Text>
+
+          <TouchableOpacity
+            style={styles.reactionButton}
+            onPress={() => handleReact("dislike")}
+            disabled={isSelf || !loggedUser}
+          >
+            <MaterialIcons
+              name="thumb-down"
+              size={26}
+              color={dislikedByMe ? "#E63946" : "#CCC"}
+            />
+          </TouchableOpacity>
+          <Text style={styles.reactionCount}>{target.dislikes?.length ?? 0}</Text>
+        </View>
+
+        {isSelf && (
+          <Text style={styles.selfNote}>Este é o seu próprio perfil</Text>
+        )}
+        {!loggedUser && (
+          <Text style={styles.selfNote}>Faça login para reagir</Text>
+        )}
+      </View>
+
+      {/* Info card */}
+      <View style={styles.infoSection}>
+        <View style={styles.infoCard}>
+          <MaterialIcons name="verified-user" size={24} color="#4169E1" />
+          <View style={styles.infoContent}>
+            <Text style={styles.infoLabel}>Status</Text>
+            <Text style={styles.infoValue}>Conta Ativa</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ── Perfil próprio ────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
+  const { viewUserEmail } = useLocalSearchParams<{ viewUserEmail?: string }>();
   const { user, signOut, updateProfile, handleProfileReaction, loading } = useAuth();
+
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState("");
@@ -31,12 +180,16 @@ export default function ProfileScreen() {
   const [photoPreviewError, setPhotoPreviewError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Redireciona para perfil do outro usuário se o param veio preenchido
+  // e não é o próprio usuário logado
+  if (viewUserEmail && viewUserEmail !== user?.email) {
+    return <OtherUserProfile targetEmail={viewUserEmail} />;
+  }
+
   useFocusEffect(
     React.useCallback(() => {
       if (!loading && !user) {
-        const timer = setTimeout(() => {
-          router.replace("/login");
-        }, 100);
+        const timer = setTimeout(() => router.replace("/login"), 100);
         return () => clearTimeout(timer);
       }
     }, [user, loading])
@@ -74,8 +227,7 @@ export default function ProfileScreen() {
     }
     setIsSaving(true);
     try {
-      const photo = editPhotoUrl.trim() || undefined;
-      await updateProfile(editName.trim(), photo);
+      await updateProfile(editName.trim(), editPhotoUrl.trim() || undefined);
       setEditModalVisible(false);
     } catch (error: any) {
       Alert.alert("Erro", error.message || "Não foi possível salvar as alterações.");
@@ -90,31 +242,26 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      "Sair da Conta",
-      "Tem certeza que deseja sair da sua conta?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Sair",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setIsLoggingOut(true);
-              await signOut();
-              router.replace("/login");
-            } catch (error: any) {
-              Alert.alert("Erro", error.message || "Erro ao fazer logout");
-            } finally {
-              setIsLoggingOut(false);
-            }
-          },
+    Alert.alert("Sair da Conta", "Tem certeza que deseja sair?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Sair",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setIsLoggingOut(true);
+            await signOut();
+            router.replace("/login");
+          } catch (error: any) {
+            Alert.alert("Erro", error.message || "Erro ao fazer logout");
+          } finally {
+            setIsLoggingOut(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  // ── Loading state ──
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -124,7 +271,6 @@ export default function ProfileScreen() {
     );
   }
 
-  // ── Not logged in ──
   if (!user) {
     return (
       <View style={styles.containerCenter}>
@@ -151,6 +297,7 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={24} color={isDark ? "#FFF" : "#333"} />
         </TouchableOpacity>
+        <Text style={[styles.headerTitle, isDark && styles.darkText]}>Meu Perfil</Text>
         <TouchableOpacity style={styles.editButton} onPress={openEditModal}>
           <MaterialIcons name="edit" size={20} color="#4169E1" />
           <Text style={styles.editButtonText}>Editar</Text>
@@ -161,11 +308,7 @@ export default function ProfileScreen() {
       <View style={[styles.profileSection, isDark && styles.darkCard]}>
         <View style={styles.avatarWrapper}>
           {user.photo ? (
-            <Image
-              source={{ uri: user.photo }}
-              style={styles.avatarImage}
-              onError={() => {}}
-            />
+            <Image source={{ uri: user.photo }} style={styles.avatarImage} />
           ) : (
             <View style={styles.avatarLarge}>
               <Text style={styles.avatarText}>
@@ -177,7 +320,6 @@ export default function ProfileScreen() {
         <Text style={[styles.userName, isDark && styles.darkText]}>{user.name}</Text>
         <Text style={styles.userEmail}>{user.email}</Text>
 
-        {/* ── Reações do perfil ── */}
         <View style={styles.reactionContainer}>
           <TouchableOpacity
             onPress={() => handleProfileReaction(user.email, "like")}
@@ -186,7 +328,7 @@ export default function ProfileScreen() {
             <MaterialIcons
               name="thumb-up"
               size={24}
-              color={user.likes?.includes(user.email) ? "#4169E1" : "#999"}
+              color={(user.likes ?? []).includes(user.email) ? "#4169E1" : "#999"}
             />
           </TouchableOpacity>
           <Text style={[styles.reactionCount, isDark && styles.darkText]}>
@@ -199,7 +341,7 @@ export default function ProfileScreen() {
             <MaterialIcons
               name="thumb-down"
               size={24}
-              color={user.dislikes?.includes(user.email) ? "#E63946" : "#999"}
+              color={(user.dislikes ?? []).includes(user.email) ? "#E63946" : "#999"}
             />
           </TouchableOpacity>
           <Text style={[styles.reactionCount, isDark && styles.darkText]}>
@@ -271,7 +413,6 @@ export default function ProfileScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Preview do avatar */}
               <View style={styles.modalAvatarArea}>
                 {showPreview ? (
                   <Image
@@ -288,13 +429,11 @@ export default function ProfileScreen() {
                 )}
               </View>
 
-              {/* Galeria */}
               <TouchableOpacity style={styles.galleryBtn} onPress={pickFromGallery}>
                 <MaterialIcons name="photo-library" size={20} color="#FFF" />
                 <Text style={styles.galleryBtnText}>Escolher da Galeria</Text>
               </TouchableOpacity>
 
-              {/* Avatares predefinidos */}
               <Text style={styles.inputLabel}>Ou escolha um personagem:</Text>
               <View style={styles.presetRow}>
                 {PRESET_AVATARS.map((url) => (
@@ -316,15 +455,9 @@ export default function ProfileScreen() {
                 ))}
               </View>
 
-              {/* Campo nome */}
               <Text style={styles.inputLabel}>Nome</Text>
               <View style={styles.inputContainer}>
-                <MaterialIcons
-                  name="person"
-                  size={20}
-                  color="#999"
-                  style={{ marginRight: 10 }}
-                />
+                <MaterialIcons name="person" size={20} color="#999" style={{ marginRight: 10 }} />
                 <TextInput
                   style={styles.textInput}
                   value={editName}
@@ -336,15 +469,9 @@ export default function ProfileScreen() {
                 />
               </View>
 
-              {/* Campo URL da foto */}
               <Text style={styles.inputLabel}>Foto de perfil (URL)</Text>
               <View style={[styles.inputContainer, { alignItems: "flex-start", paddingTop: 14 }]}>
-                <MaterialIcons
-                  name="link"
-                  size={20}
-                  color="#999"
-                  style={{ marginRight: 10, marginTop: 2 }}
-                />
+                <MaterialIcons name="link" size={20} color="#999" style={{ marginRight: 10, marginTop: 2 }} />
                 <TextInput
                   style={[styles.textInput, { minHeight: 44 }]}
                   value={editPhotoUrl}
@@ -363,15 +490,12 @@ export default function ProfileScreen() {
 
               {photoPreviewError && editPhotoUrl.trim().length > 0 && (
                 <Text style={styles.photoErrorText}>
-                  URL inválida ou imagem não carregou. Verifique o link.
+                  URL inválida ou imagem não carregou.
                 </Text>
               )}
 
               {editPhotoUrl.trim().length > 0 && (
-                <TouchableOpacity
-                  style={styles.removePhotoButton}
-                  onPress={handleRemovePhoto}
-                >
+                <TouchableOpacity style={styles.removePhotoButton} onPress={handleRemovePhoto}>
                   <MaterialIcons name="delete-outline" size={16} color="#E63946" />
                   <Text style={styles.removePhotoText}>Remover foto</Text>
                 </TouchableOpacity>
@@ -396,20 +520,12 @@ export default function ProfileScreen() {
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8F9FA",
-  },
-  darkBg: {
-    backgroundColor: "#121212",
-  },
-  darkCard: {
-    backgroundColor: "#1E1E1E",
-  },
-  darkText: {
-    color: "#FFF",
-  },
+  container: { flex: 1, backgroundColor: "#F8F9FA" },
+  darkBg: { backgroundColor: "#121212" },
+  darkCard: { backgroundColor: "#1E1E1E" },
+  darkText: { color: "#FFF" },
   containerCenter: {
     flex: 1,
     justifyContent: "center",
@@ -422,11 +538,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F8F9FA",
   },
-  loadingText: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 10,
-  },
+  loadingText: { fontSize: 16, color: "#666", marginTop: 10 },
   header: {
     paddingTop: 50,
     paddingHorizontal: 20,
@@ -435,9 +547,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  backButton: {
-    padding: 8,
-  },
+  headerTitle: { fontSize: 18, fontWeight: "800", color: "#212529" },
+  backButton: { padding: 8 },
   editButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -447,11 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
     borderRadius: 20,
   },
-  editButtonText: {
-    color: "#4169E1",
-    fontWeight: "700",
-    fontSize: 14,
-  },
+  editButtonText: { color: "#4169E1", fontWeight: "700", fontSize: 14 },
   profileSection: {
     alignItems: "center",
     padding: 30,
@@ -461,14 +568,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     elevation: 2,
   },
-  avatarWrapper: {
-    marginBottom: 16,
-  },
-  avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
+  avatarWrapper: { marginBottom: 16 },
+  avatarImage: { width: 100, height: 100, borderRadius: 50 },
   avatarLarge: {
     width: 100,
     height: 100,
@@ -477,41 +578,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarText: {
-    color: "#FFF",
-    fontSize: 40,
-    fontWeight: "bold",
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#212529",
-    marginBottom: 4,
-  },
-  userEmail: {
-    color: "#666",
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  reactionContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  reactionButton: {
-    padding: 6,
-  },
-  reactionCount: {
-    fontWeight: "bold",
-    color: "#333",
-    fontSize: 15,
-  },
-  notLoggedText: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 15,
-    marginBottom: 20,
-  },
+  avatarText: { color: "#FFF", fontSize: 40, fontWeight: "bold" },
+  userName: { fontSize: 24, fontWeight: "800", color: "#212529", marginBottom: 4 },
+  userEmail: { color: "#666", fontSize: 14, marginBottom: 16 },
+  reactionContainer: { flexDirection: "row", alignItems: "center", gap: 10 },
+  reactionButton: { padding: 6 },
+  reactionCount: { fontWeight: "bold", color: "#333", fontSize: 15 },
+  selfNote: { marginTop: 12, fontSize: 12, color: "#AAA", fontStyle: "italic" },
+  notLoggedText: { fontSize: 16, color: "#666", marginTop: 15, marginBottom: 20 },
   loginButton: {
     backgroundColor: "#4169E1",
     paddingHorizontal: 30,
@@ -519,16 +593,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 10,
   },
-  loginButtonText: {
-    color: "#FFF",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  infoSection: {
-    paddingHorizontal: 20,
-    marginTop: 20,
-    gap: 12,
-  },
+  loginButtonText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
+  infoSection: { paddingHorizontal: 20, marginTop: 20, gap: 12 },
   infoCard: {
     flexDirection: "row",
     backgroundColor: "#FFF",
@@ -537,20 +603,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 1,
   },
-  infoContent: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 4,
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#212529",
-  },
+  infoContent: { marginLeft: 16, flex: 1 },
+  infoLabel: { fontSize: 12, color: "#999", marginBottom: 4 },
+  infoValue: { fontSize: 16, fontWeight: "600", color: "#212529" },
   logoutItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -568,17 +623,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     flex: 1,
   },
-  footer: {
-    position: "absolute",
-    bottom: 20,
-    width: "100%",
-    alignItems: "center",
-  },
-  footerText: {
-    fontSize: 12,
-    color: "#999",
-  },
-  // ── Modal ──
+  footer: { position: "absolute", bottom: 20, width: "100%", alignItems: "center" },
+  footerText: { fontSize: 12, color: "#999" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -598,20 +644,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 24,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#212529",
-  },
-  modalAvatarArea: {
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalAvatarImage: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-  },
+  modalTitle: { fontSize: 20, fontWeight: "800", color: "#212529" },
+  modalAvatarArea: { alignItems: "center", marginBottom: 20 },
+  modalAvatarImage: { width: 90, height: 90, borderRadius: 45 },
   modalAvatarPlaceholder: {
     width: 90,
     height: 90,
@@ -620,11 +655,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  modalAvatarInitial: {
-    color: "#FFF",
-    fontSize: 36,
-    fontWeight: "bold",
-  },
+  modalAvatarInitial: { color: "#FFF", fontSize: 36, fontWeight: "bold" },
   galleryBtn: {
     flexDirection: "row",
     backgroundColor: "#333",
@@ -635,33 +666,11 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 20,
   },
-  galleryBtnText: {
-    color: "#FFF",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  presetRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 20,
-  },
-  presetImg: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: "#EEE",
-  },
-  presetImgSelected: {
-    borderColor: "#4169E1",
-    borderWidth: 3,
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
-    marginBottom: 8,
-  },
+  galleryBtnText: { color: "#FFF", fontWeight: "600", fontSize: 14 },
+  presetRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
+  presetImg: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: "#EEE" },
+  presetImgSelected: { borderColor: "#4169E1", borderWidth: 3 },
+  inputLabel: { fontSize: 13, fontWeight: "600", color: "#666", marginBottom: 8 },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -673,17 +682,8 @@ const styles = StyleSheet.create({
     borderColor: "#EEE",
     marginBottom: 16,
   },
-  textInput: {
-    flex: 1,
-    fontSize: 15,
-    color: "#333",
-  },
-  photoErrorText: {
-    fontSize: 12,
-    color: "#E63946",
-    marginBottom: 10,
-    marginLeft: 4,
-  },
+  textInput: { flex: 1, fontSize: 15, color: "#333" },
+  photoErrorText: { fontSize: 12, color: "#E63946", marginBottom: 10, marginLeft: 4 },
   removePhotoButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -696,11 +696,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E63946",
   },
-  removePhotoText: {
-    color: "#E63946",
-    fontSize: 13,
-    fontWeight: "600",
-  },
+  removePhotoText: { color: "#E63946", fontSize: 13, fontWeight: "600" },
   saveButton: {
     backgroundColor: "#4169E1",
     paddingVertical: 18,
@@ -708,12 +704,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  saveButtonDisabled: { opacity: 0.6 },
+  saveButtonText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
 });
