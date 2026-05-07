@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { AuthProvider } from "../src/context/AuthContext";
 import { ForumProvider } from "../src/context/ForumContext";
+import { NotificationProvider } from "../src/context/NotificationContext";
 import { StatusBar, View, StyleSheet } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import AdBanner from "../components/AdBanner";
@@ -8,6 +9,7 @@ import AdBanner from "../components/AdBanner";
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
+      <NotificationProvider>
       <AuthProvider>
         <ForumProvider>
           <StatusBar barStyle="light-content" backgroundColor="black" />
@@ -32,6 +34,7 @@ export default function RootLayout() {
           </View>
         </ForumProvider>
       </AuthProvider>
+      </NotificationProvider>
     </SafeAreaProvider>
   );
 }

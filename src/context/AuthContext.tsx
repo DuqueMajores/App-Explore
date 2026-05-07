@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 
 interface User {
   name: string;
@@ -112,7 +113,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // ── Atualizar perfil ──
   async function updateProfile(name: string, photo?: string) {
     if (!user) return;
-    await saveAndSetUser({ ...user, name: name.trim(), photo: photo ?? user.photo });
+    const newPhoto = photo ?? user.photo;
+    await saveAndSetUser({ ...user, name: name.trim(), photo: newPhoto });
+
+    // Sincroniza foto e nome nos comentários do fórum
+    try {
+      const storedForum = await AsyncStorage.getItem("@Forum:rooms");
+      if (storedForum) {
+        const rooms = JSON.parse(storedForum);
+        const updatedRooms = rooms.map((room: any) => ({
+          ...room,
+          comments: room.comments.map((comment: any) =>
+            comment.userEmail === user.email
+              ? { ...comment, userPhoto: newPhoto, userName: name.trim() }
+              : comment
+          ),
+        }));
+        await AsyncStorage.setItem("@Forum:rooms", JSON.stringify(updatedRooms));
+      }
+    } catch (e) {
+      console.error("Erro ao sincronizar foto no fórum:", e);
+    }
   }
 
   // ── TTS toggle ──
@@ -134,6 +155,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const all = await AsyncStorage.getItem("@App:users");
     const users: StoredUser[] = all ? JSON.parse(all) : [];
 
+    let isAdding = false;
+
     const updated = users.map((u) => {
       if (u.email !== targetEmail) return u;
       const likeList = [...(u.likes ?? [])];
@@ -141,19 +164,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (type === "like") {
         const idx = likeList.indexOf(user.email);
-        if (idx >= 0) likeList.splice(idx, 1);
-        else {
+        if (idx >= 0) {
+          likeList.splice(idx, 1);
+          isAdding = false;
+        } else {
           likeList.push(user.email);
-          // Remove dislike se existia
+          isAdding = true;
           const di = dislikeList.indexOf(user.email);
           if (di >= 0) dislikeList.splice(di, 1);
         }
       } else {
         const idx = dislikeList.indexOf(user.email);
-        if (idx >= 0) dislikeList.splice(idx, 1);
-        else {
+        if (idx >= 0) {
+          dislikeList.splice(idx, 1);
+          isAdding = false;
+        } else {
           dislikeList.push(user.email);
-          // Remove like se existia
+          isAdding = true;
           const li = likeList.indexOf(user.email);
           if (li >= 0) likeList.splice(li, 1);
         }
@@ -162,6 +189,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     });
 
     await AsyncStorage.setItem("@App:users", JSON.stringify(updated));
+
+    // Notifica o dono do perfil (apenas ao adicionar reação, não ao remover,
+    // e nunca quando o usuário reage ao próprio perfil)
+    if (isAdding && targetEmail !== user.email) {
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === "granted") {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: type === "like"
+                ? "👍 Novo like no seu perfil!"
+                : "👎 Novo dislike no seu perfil",
+              body: type === "like"
+                ? `${user.name} curtiu o seu perfil.`
+                : `${user.name} deu dislike no seu perfil.`,
+              data: { type: `profile_${type}`, fromName: user.name },
+              sound: true,
+            },
+            trigger: null,
+          });
+        }
+      } catch (e) {
+        console.error("Erro ao notificar reação no perfil:", e);
+      }
+    }
 
     // Se o alvo é o próprio usuário logado, atualiza o estado local também
     if (targetEmail === user.email) {

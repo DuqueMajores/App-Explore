@@ -136,14 +136,14 @@ export default function ExploreScreen() {
   };
 
   const handleDebate = async () => {
-    if (debateContent) { setActiveTab('debate'); return; }
+    if (loadingDebate) return;
+    setDebateContent(null);
     setLoadingDebate(true);
     setActiveTab('debate');
     try {
-      // jsonMode: true força o Groq a retornar JSON puro, sem texto ao redor
       const text = await callGroq(
         `Você é um gerador de debates. Sobre a notícia abaixo, gere exatamente dois argumentos em português.\nResponda com um objeto JSON com as chaves "favor" e "contra", cada uma com 2 a 3 frases.\n\nTítulo: ${title}\nDescrição: ${desc}`,
-        true // jsonMode ativado
+        true
       );
       const parsed = extractJson(text);
       setDebateContent(parsed);
@@ -230,9 +230,17 @@ export default function ExploreScreen() {
               <View style={styles.aiPanelHeader}>
                 <MaterialIcons name="thumb-up" size={16} color="#2E7D32" />
                 <Text style={[styles.aiPanelTitle, { color: "#2E7D32" }]}>A favor</Text>
+                <TouchableOpacity
+                  onPress={handleDebate}
+                  disabled={loadingDebate}
+                  style={styles.refreshButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialIcons name="refresh" size={16} color="#2E7D32" />
+                </TouchableOpacity>
               </View>
               {loadingDebate
-                ? <View style={styles.aiSkeletonLine} />
+                ? <View style={{ gap: 8 }}>{[1,2,3].map(i => <View key={i} style={styles.aiSkeletonLine} />)}</View>
                 : <Text style={styles.aiPanelText}>{debateContent?.favor}</Text>
               }
             </View>
@@ -242,7 +250,7 @@ export default function ExploreScreen() {
                 <Text style={[styles.aiPanelTitle, { color: "#C62828" }]}>Contra</Text>
               </View>
               {loadingDebate
-                ? <View style={styles.aiSkeletonLine} />
+                ? <View style={{ gap: 8 }}>{[1,2,3].map(i => <View key={i} style={styles.aiSkeletonLine} />)}</View>
                 : <Text style={styles.aiPanelText}>{debateContent?.contra}</Text>
               }
             </View>
@@ -389,6 +397,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     marginBottom: 10,
+  },
+  refreshButton: {
+    marginLeft: "auto",
+    padding: 2,
   },
   aiPanelTitle: {
     fontSize: 13,

@@ -16,6 +16,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, router, useRouter } from "expo-router";
 import { useForum, ForumComment } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
+import { useNotification } from "../src/context/NotificationContext";
 
 // ── Article Header ─────────────────────────────────────────────────────────────
 function ArticleHeader({
@@ -248,6 +249,7 @@ export default function ForumRoomScreen() {
   const { roomId } = useLocalSearchParams<{ roomId?: string }>();
   const { rooms, addComment, deleteRoom, toggleLike } = useForum();
   const { user, addReputation } = useAuth() as any;
+  const { sendNotification } = useNotification();
   const [text, setText] = useState("");
   const [replyingTo, setReplyingTo] = useState<ForumComment | null>(null);
   const [sending, setSending] = useState(false);
@@ -271,8 +273,16 @@ export default function ForumRoomScreen() {
           wasLiked ? "Curtida removida" : "Comentário curtido"
         );
       }
+      // Notifica o dono do comentário ao dar like (não ao remover)
+      if (!wasLiked && commentOwnerEmail && commentOwnerEmail !== user.email) {
+        await sendNotification({
+          type: "comment_like",
+          fromName: user.name,
+          roomId: room.id,
+        });
+      }
     },
-    [user, room, toggleLike, addReputation]
+    [user, room, toggleLike, addReputation, sendNotification]
   );
 
   const handleDeleteRoom = useCallback(() => {
@@ -306,6 +316,19 @@ export default function ForumRoomScreen() {
         user.photo ?? undefined,
         replyingTo?.id ?? null
       );
+
+      // Notifica o dono do comentário pai quando alguém responde
+      if (
+        replyingTo &&
+        replyingTo.userEmail !== user.email
+      ) {
+        await sendNotification({
+          type: "comment_reply",
+          fromName: user.name,
+          roomId: room.id,
+        });
+      }
+
       setText("");
       setReplyingTo(null);
       setTimeout(() => {
@@ -314,7 +337,7 @@ export default function ForumRoomScreen() {
     } finally {
       setSending(false);
     }
-  }, [text, user, room, sending, addComment, replyingTo]);
+  }, [text, user, room, sending, addComment, replyingTo, sendNotification]);
 
   if (!room) {
     return (
