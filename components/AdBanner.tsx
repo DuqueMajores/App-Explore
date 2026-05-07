@@ -9,6 +9,7 @@ export default function AdBanner() {
         justifyContent: "center",
         alignItems: "center",
         marginVertical: 10,
+        top: -10
       }}
     >
       <Text style={{ fontSize: 12 }}>Publicidade</Text>

@@ -13,11 +13,11 @@ import {
   View,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams, router, useRouter } from "expo-router";
 import { useForum, ForumComment } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
-import { useRouter } from "expo-router";
 
+// ── Article Header ─────────────────────────────────────────────────────────────
 function ArticleHeader({
   title,
   image,
@@ -63,6 +63,7 @@ function ArticleHeader({
   );
 }
 
+// ── Comment Card ───────────────────────────────────────────────────────────────
 interface CommentCardProps {
   comment: ForumComment;
   depth: number;
@@ -88,24 +89,35 @@ function CommentCard({
         isRoot && styles.commentCardRoot,
       ]}
     >
-      <TouchableOpacity
-        onPress={() => router.push({ pathname: "/perfil", params: { viewUserEmail: comment.userEmail } })}
-      >
-        <Text style={styles.commentUserName}>{comment.userName}</Text>
-      </TouchableOpacity>
       <View style={styles.commentHeader}>
-        <View style={[styles.commentAvatar, isRoot && styles.commentAvatarRoot]}>
-          <Text style={styles.commentAvatarText}>
-            {comment.userName.charAt(0).toUpperCase()}
-          </Text>
-        </View>
+        <TouchableOpacity
+          onPress={() =>
+            router.push({
+              pathname: "/perfil",
+              params: { viewUserEmail: comment.userEmail },
+            })
+          }
+        >
+          <View style={[styles.commentAvatar, isRoot && styles.commentAvatarRoot]}>
+            <Text style={styles.commentAvatarText}>
+              {comment.userName.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        </TouchableOpacity>
         <View style={styles.commentHeaderInfo}>
-          <Text style={[styles.commentUserName, isRoot && styles.commentUserNameRoot]}>
-            {comment.userName}
-            {isRoot && (
-              <Text style={styles.opBadge}> · OP</Text>
-            )}
-          </Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: "/perfil",
+                params: { viewUserEmail: comment.userEmail },
+              })
+            }
+          >
+            <Text style={[styles.commentUserName, isRoot && styles.commentUserNameRoot]}>
+              {comment.userName}
+              {isRoot && <Text style={styles.opBadge}> · OP</Text>}
+            </Text>
+          </TouchableOpacity>
           <Text style={styles.commentDate}>
             {new Date(comment.createdAt).toLocaleDateString("pt-BR")}{" "}
             {new Date(comment.createdAt).toLocaleTimeString("pt-BR", {
@@ -136,9 +148,15 @@ function CommentCard({
           disabled={comment.userEmail === currentUserEmail}
         >
           <MaterialIcons
-            name={comment.likes?.includes(currentUserEmail ?? '') ? "favorite" : "favorite-border"}
+            name={
+              comment.likes?.includes(currentUserEmail ?? "")
+                ? "favorite"
+                : "favorite-border"
+            }
             size={16}
-            color={comment.likes?.includes(currentUserEmail ?? '') ? "#E63946" : "#999"}
+            color={
+              comment.likes?.includes(currentUserEmail ?? "") ? "#E63946" : "#999"
+            }
           />
           {comment.likes?.length > 0 && (
             <Text style={styles.likeCount}>{comment.likes.length}</Text>
@@ -149,6 +167,7 @@ function CommentCard({
   );
 }
 
+// ── Comment With Replies ───────────────────────────────────────────────────────
 function CommentWithReplies({
   comment,
   allComments,
@@ -193,7 +212,9 @@ function CommentWithReplies({
           <Text style={styles.showRepliesText}>
             {showReplies
               ? "Ocultar respostas"
-              : `${directReplies.length} ${directReplies.length === 1 ? "resposta" : "respostas"}`}
+              : `${directReplies.length} ${
+                  directReplies.length === 1 ? "resposta" : "respostas"
+                }`}
           </Text>
         </TouchableOpacity>
       )}
@@ -215,28 +236,37 @@ function CommentWithReplies({
   );
 }
 
+// ── Main Screen ────────────────────────────────────────────────────────────────
 export default function ForumRoomScreen() {
   const { roomId } = useLocalSearchParams<{ roomId?: string }>();
   const { rooms, addComment, deleteRoom, toggleLike } = useForum();
-  const { user, addReputation } = useAuth();
+  const { user, addReputation } = useAuth() as any;
   const [text, setText] = useState("");
   const [replyingTo, setReplyingTo] = useState<ForumComment | null>(null);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const room = rooms.find((r) => r.id === roomId);
-  const router = useRouter();
+  const localRouter = useRouter();
 
-  const handleLike = useCallback(async (commentId: string) => {
-    if (!user || !room) return;
-    const { wasLiked, commentOwnerEmail } = await toggleLike(room.id, commentId, user.email);
-    if (commentOwnerEmail && commentOwnerEmail !== user.email) {
-      await addReputation(
-        commentOwnerEmail,
-        wasLiked ? -5 : 5,
-        wasLiked ? "Curtida removida" : "Comentário curtido"
+  const room = rooms.find((r) => r.id === roomId);
+
+  const handleLike = useCallback(
+    async (commentId: string) => {
+      if (!user || !room) return;
+      const { wasLiked, commentOwnerEmail } = await toggleLike(
+        room.id,
+        commentId,
+        user.email
       );
-    }
-  }, [user, room, toggleLike, addReputation]);
+      if (addReputation && commentOwnerEmail && commentOwnerEmail !== user.email) {
+        await addReputation(
+          commentOwnerEmail,
+          wasLiked ? -5 : 5,
+          wasLiked ? "Curtida removida" : "Comentário curtido"
+        );
+      }
+    },
+    [user, room, toggleLike, addReputation]
+  );
 
   const handleDeleteRoom = useCallback(() => {
     Alert.alert(
@@ -249,12 +279,12 @@ export default function ForumRoomScreen() {
           style: "destructive",
           onPress: async () => {
             await deleteRoom(room!.id);
-            router.replace("/forum");
+            localRouter.replace("/forum");
           },
         },
       ]
     );
-  }, [deleteRoom, room]);
+  }, [deleteRoom, room, localRouter]);
 
   const handleSend = useCallback(async () => {
     if (!text.trim() || !user || !room || sending) return;
@@ -283,7 +313,10 @@ export default function ForumRoomScreen() {
       <View style={styles.centerContainer}>
         <MaterialIcons name="error-outline" size={60} color="#DDD" />
         <Text style={styles.errorText}>Sala não encontrada</Text>
-        <TouchableOpacity style={styles.backLink} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backLink}
+          onPress={() => localRouter.back()}
+        >
           <Text style={styles.backLinkText}>Voltar</Text>
         </TouchableOpacity>
       </View>
@@ -291,21 +324,23 @@ export default function ForumRoomScreen() {
   }
 
   const sortedComments = [...room.comments].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    (a, b) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
   const rootComment = sortedComments.find((c) => c.parentId === null) ?? null;
-
   const topLevelComments = sortedComments.filter(
     (c) => c.parentId === null && c.id !== rootComment?.id
   );
 
   const listData: Array<
-    { type: "header" } | { type: "root" } | { type: "comment"; comment: ForumComment }
+    | { type: "header" }
+    | { type: "root" }
+    | { type: "comment"; comment: ForumComment }
   > = [
-      { type: "header" },
-      ...(rootComment ? [{ type: "root" as const }] : []),
-      ...topLevelComments.map((c) => ({ type: "comment" as const, comment: c })),
-    ];
+    { type: "header" },
+    ...(rootComment ? [{ type: "root" as const }] : []),
+    ...topLevelComments.map((c) => ({ type: "comment" as const, comment: c })),
+  ];
 
   return (
     <KeyboardAvoidingView
@@ -313,9 +348,12 @@ export default function ForumRoomScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
-      {/* Fixed Header */}
+      {/* ── Fixed Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => localRouter.back()}
+          style={styles.backButton}
+        >
           <MaterialIcons name="arrow-back" size={24} color="#212529" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
@@ -327,7 +365,10 @@ export default function ForumRoomScreen() {
           </Text>
         </View>
         {user?.email === room?.createdBy ? (
-          <TouchableOpacity onPress={handleDeleteRoom} style={styles.deleteButton}>
+          <TouchableOpacity
+            onPress={handleDeleteRoom}
+            style={styles.deleteButton}
+          >
             <MaterialIcons name="delete-outline" size={24} color="#E63946" />
           </TouchableOpacity>
         ) : (
@@ -335,12 +376,14 @@ export default function ForumRoomScreen() {
         )}
       </View>
 
-      {/* Scrollable Content */}
+      {/* ── Scrollable Content ── */}
       <FlatList
         ref={flatListRef}
         data={listData}
         keyExtractor={(item, idx) =>
-          item.type === "comment" ? item.comment.id : `${item.type}-${idx}`
+          item.type === "comment"
+            ? item.comment.id
+            : `${item.type}-${idx}`
         }
         contentContainerStyle={styles.commentsList}
         keyboardShouldPersistTaps="handled"
@@ -393,13 +436,15 @@ export default function ForumRoomScreen() {
             <View style={styles.emptyComments}>
               <MaterialIcons name="chat-bubble-outline" size={50} color="#DDD" />
               <Text style={styles.emptyCommentsText}>Nenhum comentário ainda</Text>
-              <Text style={styles.emptyCommentsSubtext}>Seja o primeiro a comentar!</Text>
+              <Text style={styles.emptyCommentsSubtext}>
+                Seja o primeiro a comentar!
+              </Text>
             </View>
           ) : null
         }
       />
 
-      {/* Input Area */}
+      {/* ── Input Area ── */}
       {user && (
         <View style={styles.inputContainer}>
           {replyingTo && (
@@ -418,7 +463,9 @@ export default function ForumRoomScreen() {
               value={text}
               onChangeText={setText}
               placeholder={
-                replyingTo ? "Escreva sua resposta..." : "Escreva um comentário..."
+                replyingTo
+                  ? "Escreva sua resposta..."
+                  : "Escreva um comentário..."
               }
               placeholderTextColor="#CCC"
               multiline
@@ -442,12 +489,10 @@ export default function ForumRoomScreen() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const articleStyles = StyleSheet.create({
-  container: {
-    marginBottom: 16,
-  },
+  container: { marginBottom: 16 },
   image: {
     width: "100%",
     height: 200,
@@ -455,9 +500,7 @@ const articleStyles = StyleSheet.create({
     marginBottom: 14,
     backgroundColor: "#EEE",
   },
-  body: {
-    paddingHorizontal: 2,
-  },
+  body: { paddingHorizontal: 2 },
   title: {
     fontSize: 18,
     fontWeight: "800",
@@ -491,21 +534,14 @@ const articleStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8F9FA",
-  },
+  container: { flex: 1, backgroundColor: "#F8F9FA" },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F8F9FA",
   },
-  errorText: {
-    fontSize: 16,
-    color: "#999",
-    marginTop: 12,
-  },
+  errorText: { fontSize: 16, color: "#999", marginTop: 12 },
   backLink: {
     marginTop: 16,
     paddingVertical: 10,
@@ -513,10 +549,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#4169E1",
     borderRadius: 12,
   },
-  backLinkText: {
-    color: "#FFF",
-    fontWeight: "600",
-  },
+  backLinkText: { color: "#FFF", fontWeight: "600" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -540,24 +573,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 10,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#212529",
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "#999",
-    marginTop: 2,
-  },
+  headerTitle: { fontSize: 18, fontWeight: "800", color: "#212529" },
+  headerSubtitle: { fontSize: 13, color: "#999", marginTop: 2 },
   commentsList: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 16,
   },
-  commentWrapper: {
-    marginBottom: 10,
-  },
+  commentWrapper: { marginBottom: 10 },
   commentCard: {
     backgroundColor: "#FFF",
     borderRadius: 16,
@@ -572,9 +595,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F8FF",
     marginBottom: 4,
   },
-  commentCardReply: {
-    borderLeftColor: "#A0B4F0",
-  },
+  commentCardReply: { borderLeftColor: "#A0B4F0" },
   commentHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -589,73 +610,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 10,
   },
-  commentAvatarRoot: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-  },
-  commentAvatarText: {
-    color: "#FFF",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  commentHeaderInfo: {
-    flex: 1,
-  },
-  commentUserName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#212529",
-  },
-  commentUserNameRoot: {
-    fontSize: 15,
-  },
-  opBadge: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#4169E1",
-  },
-  commentDate: {
-    fontSize: 12,
-    color: "#999",
-    marginTop: 1,
-  },
-  commentText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#444",
-  },
-  commentTextRoot: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: "#212529",
-  },
+  commentAvatarRoot: { width: 38, height: 38, borderRadius: 19 },
+  commentAvatarText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  commentHeaderInfo: { flex: 1 },
+  commentUserName: { fontSize: 14, fontWeight: "700", color: "#212529" },
+  commentUserNameRoot: { fontSize: 15 },
+  opBadge: { fontSize: 12, fontWeight: "600", color: "#4169E1" },
+  commentDate: { fontSize: 12, color: "#999", marginTop: 1 },
+  commentText: { fontSize: 15, lineHeight: 22, color: "#444" },
+  commentTextRoot: { fontSize: 16, lineHeight: 24, color: "#212529" },
   commentActions: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 8,
     gap: 12,
   },
-  replyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  replyButton: { flexDirection: "row", alignItems: "center" },
   replyButtonText: {
     fontSize: 13,
     color: "#4169E1",
     fontWeight: "600",
     marginLeft: 4,
   },
-  likeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  likeCount: {
-    fontSize: 13,
-    color: "#999",
-    fontWeight: "600",
-  },
+  likeButton: { flexDirection: "row", alignItems: "center", gap: 4 },
+  likeCount: { fontSize: 13, color: "#999", fontWeight: "600" },
   showRepliesButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -664,11 +642,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     gap: 4,
   },
-  showRepliesText: {
-    fontSize: 13,
-    color: "#4169E1",
-    fontWeight: "600",
-  },
+  showRepliesText: { fontSize: 13, color: "#4169E1", fontWeight: "600" },
   emptyComments: {
     justifyContent: "center",
     alignItems: "center",
@@ -680,11 +654,7 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 12,
   },
-  emptyCommentsSubtext: {
-    fontSize: 14,
-    color: "#CCC",
-    marginTop: 4,
-  },
+  emptyCommentsSubtext: { fontSize: 14, color: "#CCC", marginTop: 4 },
   inputContainer: {
     backgroundColor: "#FFF",
     borderTopWidth: 1,
@@ -710,11 +680,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 10,
-  },
+  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
   textInput: {
     flex: 1,
     backgroundColor: "#F8F9FA",
@@ -733,9 +699,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
+  sendButtonDisabled: { opacity: 0.5 },
   deleteButton: {
     width: 40,
     height: 40,
@@ -745,26 +709,3 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 });
-
-
-// Substitua o trecho do nome do usuário dentro do CommentCard:
-<TouchableOpacity 
-  onPress={() => router.push({ pathname: "/perfil", params: { viewUserEmail: comment.userEmail } })}
->
-  <Text style={[styles.commentUserName, isRoot && styles.commentUserNameRoot]}>
-    {comment.userName}
-    {isRoot && <Text style={styles.opBadge}> · OP</Text>}
-  </Text>
-</TouchableOpacity>
-
-"""Para o Dark Mode funcionar em todas as telas, você deve passar o estilo isDark && styles.darkBg para a View principal de cada arquivo."""
-
-import { useRouter } from "expo-router";
-
-const router = useRouter();
-
-<Text
-  onPress={() => router.push(`/perfil?userId=${item.userId}`)}
->
-  {item.username}
-</Text>
