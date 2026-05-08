@@ -64,7 +64,7 @@ export default function RedeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:{ flex:1, backgroundColor:'#F8F9FA', padding:16 },
+  container:{ flex:1, backgroundColor:'#FFF', padding:16},
   header:{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
   title:{ fontSize:22, fontWeight:'700' },
   searchBox:{ flexDirection:'row', alignItems:'center', backgroundColor:'#FFF', borderRadius:12, paddingHorizontal:12, marginBottom:16 },

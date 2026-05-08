@@ -15,6 +15,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../src/context/AuthContext";
 
 type Article = {
@@ -27,7 +28,19 @@ type Article = {
   urlToImage?: string | null;
 };
 
-type Reaction = "like" | "dislike" | null;
+// Estrutura de reações: cada artigo guarda arrays de emails
+type ArticleReactions = {
+  likes: string[];
+  dislikes: string[];
+};
+
+const REACTIONS_KEY = "@App:articleReactions";
+
+// Garante arrays válidos mesmo que o storage tenha dados antigos com campos undefined
+const safeR = (r: any): ArticleReactions => ({
+  likes: Array.isArray(r?.likes) ? r.likes : [],
+  dislikes: Array.isArray(r?.dislikes) ? r.dislikes : [],
+});
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 const SkeletonPulse = ({ style }: { style: any }) => {
@@ -64,13 +77,28 @@ export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [loadingArticles, setLoadingArticles] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
-  const [reactions, setReactions] = useState<Record<string, Reaction>>({});
+  const [reactions, setReactions] = useState<Record<string, ArticleReactions>>({});
   const menuAnimation = useRef(new Animated.Value(0)).current;
 
-  // Remove aspas e ponto-e-vírgula que o .env pode incluir literalmente no valor
   const apiKey = (process.env.EXPO_PUBLIC_NEWS_API_KEY ?? "")
     .replace(/[";]/g, "")
     .trim();
+
+  // ── Carrega reações persistidas ao montar ──
+  useEffect(() => {
+    AsyncStorage.getItem(REACTIONS_KEY)
+      .then((stored) => {
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const migrated: Record<string, ArticleReactions> = {};
+          for (const key of Object.keys(parsed)) {
+            migrated[key] = safeR(parsed[key]);
+          }
+          setReactions(migrated);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -133,12 +161,47 @@ export default function HomeScreen() {
     }).start();
   };
 
-  const handleReaction = (articleUrl: string, type: Reaction) => {
-    setReactions((prev) => ({
-      ...prev,
-      [articleUrl]: prev[articleUrl] === type ? null : type,
-    }));
-  };
+  // ── Reação com contagem por usuário e persistência ──
+  const handleReaction = useCallback(async (articleKey: string, type: "like" | "dislike") => {
+    if (!user) return;
+
+    const current: ArticleReactions = safeR(reactions[articleKey]);
+    const email = user.email;
+
+    let newLikes = [...current.likes];
+    let newDislikes = [...current.dislikes];
+
+    if (type === "like") {
+      if (newLikes.includes(email)) {
+        // remove like
+        newLikes = newLikes.filter((e) => e !== email);
+      } else {
+        // adiciona like e remove dislike se existir
+        newLikes.push(email);
+        newDislikes = newDislikes.filter((e) => e !== email);
+      }
+    } else {
+      if (newDislikes.includes(email)) {
+        // remove dislike
+        newDislikes = newDislikes.filter((e) => e !== email);
+      } else {
+        // adiciona dislike e remove like se existir
+        newDislikes.push(email);
+        newLikes = newLikes.filter((e) => e !== email);
+      }
+    }
+
+    const updated = {
+      ...reactions,
+      [articleKey]: { likes: newLikes, dislikes: newDislikes },
+    };
+    setReactions(updated);
+    try {
+      await AsyncStorage.setItem(REACTIONS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.error("Erro ao salvar reação:", e);
+    }
+  }, [reactions, user]);
 
   if (loading || !hasInitialized) {
     return (
@@ -217,6 +280,7 @@ export default function HomeScreen() {
           <MaterialIcons name="forum" size={22} color="#4169E1" />
           <Text style={styles.menuOptionText}>Forum</Text>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.menuOption}
           onPress={() => { toggleMenu(); router.replace("/"); }}
@@ -258,7 +322,10 @@ export default function HomeScreen() {
         keyExtractor={(item, index) => `${item.url ?? "article"}-${index}`}
         renderItem={({ item }) => {
           const key = item.url ?? item.title ?? "";
-          const reaction = reactions[key] ?? null;
+          const r = safeR(reactions[key]);
+          const email = user?.email ?? "";
+          const likedByMe = email ? r.likes.includes(email) : false;
+          const dislikedByMe = email ? r.dislikes.includes(email) : false;
 
           return (
             <TouchableOpacity
@@ -297,18 +364,27 @@ export default function HomeScreen() {
                   </Text>
 
                   <View style={styles.reactionRow}>
+                    {/* Like */}
                     <TouchableOpacity
                       style={styles.reactionButton}
                       onPress={() => handleReaction(key, "like")}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
                     >
                       <MaterialIcons
-                        name={reaction === "like" ? "favorite" : "favorite-border"}
-                        size={22}
-                        color={reaction === "like" ? "#E63946" : "#CCC"}
+                        name={likedByMe ? "favorite" : "favorite-border"}
+                        size={20}
+                        color={likedByMe ? "#E63946" : "#CCC"}
                       />
                     </TouchableOpacity>
+                    {r.likes.length > 0 && (
+                      <Text style={[styles.reactionCount, likedByMe && styles.reactionCountLike]}>
+                        {r.likes.length}
+                      </Text>
+                    )}
 
+                    <View style={styles.reactionSeparator} />
+
+                    {/* Dislike */}
                     <TouchableOpacity
                       style={styles.reactionButton}
                       onPress={() => handleReaction(key, "dislike")}
@@ -316,10 +392,15 @@ export default function HomeScreen() {
                     >
                       <MaterialIcons
                         name="heart-broken"
-                        size={22}
-                        color={reaction === "dislike" ? "#6B7280" : "#E0E0E0"}
+                        size={20}
+                        color={dislikedByMe ? "#6B7280" : "#E0E0E0"}
                       />
                     </TouchableOpacity>
+                    {r.dislikes.length > 0 && (
+                      <Text style={[styles.reactionCount, dislikedByMe && styles.reactionCountDislike]}>
+                        {r.dislikes.length}
+                      </Text>
+                    )}
                   </View>
                 </View>
               </View>
@@ -510,10 +591,24 @@ const styles = StyleSheet.create({
   reactionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
   },
   reactionButton: {
     padding: 2,
+  },
+  reactionCount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#999",
+  },
+  reactionCountLike: {
+    color: "#E63946",
+  },
+  reactionCountDislike: {
+    color: "#6B7280",
+  },
+  reactionSeparator: {
+    width: 8,
   },
   skeletonImage: {
     width: "100%",

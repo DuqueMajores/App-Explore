@@ -65,9 +65,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
     return () => {
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
+      responseListener.current?.remove();
     };
   }, []);
 
