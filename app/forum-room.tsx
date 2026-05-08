@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import {
   Alert,
   FlatList,
@@ -17,6 +17,9 @@ import { useLocalSearchParams, router, useRouter } from "expo-router";
 import { useForum, ForumComment } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
 import { useNotification } from "../src/context/NotificationContext";
+
+const PAGE_SIZE = 10;
+const TOP_COUNT = 3;
 
 // ── Article Header ─────────────────────────────────────────────────────────────
 function ArticleHeader({
@@ -69,6 +72,7 @@ interface CommentCardProps {
   comment: ForumComment;
   depth: number;
   isRoot: boolean;
+  isTop?: boolean;
   onReply: (c: ForumComment) => void;
   onLike: (commentId: string) => void;
   currentUserEmail?: string;
@@ -78,6 +82,7 @@ function CommentCard({
   comment,
   depth,
   isRoot,
+  isTop,
   onReply,
   onLike,
   currentUserEmail,
@@ -88,8 +93,15 @@ function CommentCard({
         styles.commentCard,
         depth > 0 && styles.commentCardReply,
         isRoot && styles.commentCardRoot,
+        isTop && styles.commentCardTop,
       ]}
     >
+      {isTop && (
+        <View style={styles.topBadgeRow}>
+          <MaterialIcons name="star" size={12} color="#F59E0B" />
+          <Text style={styles.topBadgeText}>Mais curtido</Text>
+        </View>
+      )}
       <View style={styles.commentHeader}>
         <TouchableOpacity
           onPress={() =>
@@ -181,6 +193,7 @@ function CommentWithReplies({
   allComments,
   depth,
   isRoot,
+  isTop,
   onReply,
   onLike,
   currentUserEmail,
@@ -189,6 +202,7 @@ function CommentWithReplies({
   allComments: ForumComment[];
   depth: number;
   isRoot: boolean;
+  isTop?: boolean;
   onReply: (c: ForumComment) => void;
   onLike: (commentId: string) => void;
   currentUserEmail?: string;
@@ -202,6 +216,7 @@ function CommentWithReplies({
         comment={comment}
         depth={depth}
         isRoot={isRoot}
+        isTop={isTop}
         onReply={onReply}
         onLike={onLike}
         currentUserEmail={currentUserEmail}
@@ -253,6 +268,8 @@ export default function ForumRoomScreen() {
   const [text, setText] = useState("");
   const [replyingTo, setReplyingTo] = useState<ForumComment | null>(null);
   const [sending, setSending] = useState(false);
+  // how many "remaining" comments (after top 3) are visible
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const flatListRef = useRef<FlatList>(null);
   const localRouter = useRouter();
 
@@ -273,7 +290,6 @@ export default function ForumRoomScreen() {
           wasLiked ? "Curtida removida" : "Comentário curtido"
         );
       }
-      // Notifica o dono do comentário ao dar like (não ao remover)
       if (!wasLiked && commentOwnerEmail && commentOwnerEmail !== user.email) {
         await sendNotification({
           type: "comment_like",
@@ -317,11 +333,7 @@ export default function ForumRoomScreen() {
         replyingTo?.id ?? null
       );
 
-      // Notifica o dono do comentário pai quando alguém responde
-      if (
-        replyingTo &&
-        replyingTo.userEmail !== user.email
-      ) {
+      if (replyingTo && replyingTo.userEmail !== user.email) {
         await sendNotification({
           type: "comment_reply",
           fromName: user.name,
@@ -339,6 +351,42 @@ export default function ForumRoomScreen() {
     }
   }, [text, user, room, sending, addComment, replyingTo, sendNotification]);
 
+  // ── Derived comment lists ──────────────────────────────────────────────────
+  const { rootComment, topComments, remainingComments, allSorted } = useMemo(() => {
+    if (!room) return { rootComment: null, topComments: [], remainingComments: [], allSorted: [] };
+
+    const sorted = [...room.comments].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    const root = sorted.find((c) => c.parentId === null) ?? null;
+
+    // Only top-level (non-root) comments participate in top 3 + remaining
+    const topLevel = sorted.filter(
+      (c) => c.parentId === null && c.id !== root?.id
+    );
+
+    // Sort top-level by likes descending to pick the top 3
+    const byLikes = [...topLevel].sort(
+      (a, b) => (b.likes?.length ?? 0) - (a.likes?.length ?? 0)
+    );
+
+    const topIds = new Set(
+      byLikes
+        .filter((c) => (c.likes?.length ?? 0) > 0)
+        .slice(0, TOP_COUNT)
+        .map((c) => c.id)
+    );
+
+    const top = byLikes
+      .filter((c) => topIds.has(c.id));
+
+    // Remaining = top-level not in top, in chronological order
+    const remaining = topLevel.filter((c) => !topIds.has(c.id));
+
+    return { rootComment: root, topComments: top, remainingComments: remaining, allSorted: sorted };
+  }, [room]);
+
   if (!room) {
     return (
       <View style={styles.centerContainer}>
@@ -354,23 +402,33 @@ export default function ForumRoomScreen() {
     );
   }
 
-  const sortedComments = [...room.comments].sort(
-    (a, b) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
-  const rootComment = sortedComments.find((c) => c.parentId === null) ?? null;
-  const topLevelComments = sortedComments.filter(
-    (c) => c.parentId === null && c.id !== rootComment?.id
-  );
+  const visibleRemaining = remainingComments.slice(0, visibleCount);
+  const hasMore = visibleCount < remainingComments.length;
+  const hiddenCount = remainingComments.length - visibleCount;
 
-  const listData: Array<
+  type ListItem =
     | { type: "header" }
     | { type: "root" }
+    | { type: "top-section-label" }
+    | { type: "top"; comment: ForumComment }
+    | { type: "remaining-section-label" }
     | { type: "comment"; comment: ForumComment }
-  > = [
+    | { type: "show-more" };
+
+  const listData: ListItem[] = [
     { type: "header" },
     ...(rootComment ? [{ type: "root" as const }] : []),
-    ...topLevelComments.map((c) => ({ type: "comment" as const, comment: c })),
+    ...(topComments.length > 0
+      ? [
+          { type: "top-section-label" as const },
+          ...topComments.map((c) => ({ type: "top" as const, comment: c })),
+        ]
+      : []),
+    ...(remainingComments.length > 0
+      ? [{ type: "remaining-section-label" as const }]
+      : []),
+    ...visibleRemaining.map((c) => ({ type: "comment" as const, comment: c })),
+    ...(hasMore ? [{ type: "show-more" as const }] : []),
   ];
 
   return (
@@ -411,11 +469,10 @@ export default function ForumRoomScreen() {
       <FlatList
         ref={flatListRef}
         data={listData}
-        keyExtractor={(item, idx) =>
-          item.type === "comment"
-            ? item.comment.id
-            : `${item.type}-${idx}`
-        }
+        keyExtractor={(item, idx) => {
+          if (item.type === "top" || item.type === "comment") return item.comment.id;
+          return `${item.type}-${idx}`;
+        }}
         contentContainerStyle={styles.commentsList}
         keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => {
@@ -434,7 +491,7 @@ export default function ForumRoomScreen() {
             return (
               <CommentWithReplies
                 comment={rootComment}
-                allComments={sortedComments}
+                allComments={allSorted}
                 depth={0}
                 isRoot={true}
                 onReply={setReplyingTo}
@@ -444,12 +501,51 @@ export default function ForumRoomScreen() {
             );
           }
 
+          if (item.type === "top-section-label") {
+            return (
+              <View style={styles.sectionLabel}>
+                <MaterialIcons name="star" size={14} color="#F59E0B" />
+                <Text style={styles.sectionLabelText}>
+                  Comentários em destaque
+                </Text>
+              </View>
+            );
+          }
+
+          if (item.type === "top") {
+            return (
+              <View style={styles.commentWrapper}>
+                <CommentWithReplies
+                  comment={item.comment}
+                  allComments={allSorted}
+                  depth={0}
+                  isRoot={false}
+                  isTop={true}
+                  onReply={setReplyingTo}
+                  onLike={handleLike}
+                  currentUserEmail={user?.email}
+                />
+              </View>
+            );
+          }
+
+          if (item.type === "remaining-section-label") {
+            return (
+              <View style={styles.sectionLabel}>
+                <MaterialIcons name="chat-bubble-outline" size={14} color="#999" />
+                <Text style={[styles.sectionLabelText, { color: "#999" }]}>
+                  Todos os comentários
+                </Text>
+              </View>
+            );
+          }
+
           if (item.type === "comment") {
             return (
               <View style={styles.commentWrapper}>
                 <CommentWithReplies
                   comment={item.comment}
-                  allComments={sortedComments}
+                  allComments={allSorted}
                   depth={0}
                   isRoot={false}
                   onReply={setReplyingTo}
@@ -457,6 +553,23 @@ export default function ForumRoomScreen() {
                   currentUserEmail={user?.email}
                 />
               </View>
+            );
+          }
+
+          if (item.type === "show-more") {
+            return (
+              <TouchableOpacity
+                style={styles.showMoreButton}
+                onPress={() => setVisibleCount((v) => v + PAGE_SIZE)}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="expand-more" size={20} color="#4169E1" />
+                <Text style={styles.showMoreText}>
+                  Mostrar mais {Math.min(PAGE_SIZE, hiddenCount)} comentário
+                  {Math.min(PAGE_SIZE, hiddenCount) !== 1 ? "s" : ""}
+                  {hiddenCount > PAGE_SIZE ? ` (${hiddenCount} restantes)` : ""}
+                </Text>
+              </TouchableOpacity>
             );
           }
 
@@ -612,6 +725,21 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   commentWrapper: { marginBottom: 10 },
+  sectionLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+    marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  sectionLabelText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#F59E0B",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   commentCard: {
     backgroundColor: "#FFF",
     borderRadius: 16,
@@ -627,6 +755,24 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   commentCardReply: { borderLeftColor: "#A0B4F0" },
+  commentCardTop: {
+    borderLeftColor: "#F59E0B",
+    backgroundColor: "#FFFBEB",
+    elevation: 2,
+  },
+  topBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 8,
+  },
+  topBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#F59E0B",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
   commentHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -643,7 +789,7 @@ const styles = StyleSheet.create({
   },
   commentAvatarRoot: { width: 38, height: 38, borderRadius: 19 },
   commentAvatarText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
-  commentAvatarImg: { borderRadius: 999 },  // faz a Image ficar redonda
+  commentAvatarImg: { borderRadius: 999 },
   commentHeaderInfo: { flex: 1 },
   commentUserName: { fontSize: 14, fontWeight: "700", color: "#212529" },
   commentUserNameRoot: { fontSize: 15 },
@@ -675,6 +821,24 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   showRepliesText: { fontSize: 13, color: "#4169E1", fontWeight: "600" },
+  showMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 4,
+    marginBottom: 10,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+  },
+  showMoreText: {
+    fontSize: 14,
+    color: "#4169E1",
+    fontWeight: "700",
+  },
   emptyComments: {
     justifyContent: "center",
     alignItems: "center",

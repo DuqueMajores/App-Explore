@@ -9,19 +9,78 @@ import {
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useForum } from "../src/context/ForumContext";
+import { useForum, ForumRoom } from "../src/context/ForumContext";
+
+const TOP_ROOMS = 4;
+
+type ListItem =
+  | { type: "featured-label" }
+  | { type: "all-label" }
+  | { type: "room"; room: ForumRoom; isFeatured: boolean };
 
 export default function ForumScreen() {
   const { rooms } = useForum();
   const [search, setSearch] = useState("");
 
-  const filteredRooms = useMemo(() => {
+  const { listData, featuredCount } = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rooms;
-    return rooms.filter((r) =>
-      r.articleTitle.toLowerCase().includes(q)
+
+    // When searching, show flat results sorted by most recent
+    if (q) {
+      const filtered = rooms
+        .filter((r) => r.articleTitle.toLowerCase().includes(q))
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      return {
+        listData: filtered.map((room) => ({
+          type: "room" as const,
+          room,
+          isFeatured: false,
+        })),
+        featuredCount: 0,
+      };
+    }
+
+    // Sort by comment count descending to pick top 4
+    // Only rooms with more than 1 comment (i.e. beyond the OP's opening comment) qualify
+    const byComments = [...rooms]
+      .filter((r) => r.comments.length > 1)
+      .sort((a, b) => b.comments.length - a.comments.length);
+    const featuredIds = new Set(
+      byComments.slice(0, TOP_ROOMS).map((r) => r.id)
     );
+    const featured = byComments.slice(0, TOP_ROOMS);
+
+    // Remaining sorted by createdAt descending (most recent first)
+    const remaining = rooms
+      .filter((r) => !featuredIds.has(r.id))
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+    const items: ListItem[] = [];
+
+    if (featured.length > 0) {
+      items.push({ type: "featured-label" });
+      featured.forEach((room) =>
+        items.push({ type: "room", room, isFeatured: true })
+      );
+    }
+
+    if (remaining.length > 0) {
+      items.push({ type: "all-label" });
+      remaining.forEach((room) =>
+        items.push({ type: "room", room, isFeatured: false })
+      );
+    }
+
+    return { listData: items, featuredCount: featured.length };
   }, [rooms, search]);
+
+  const isEmpty = rooms.length === 0 || listData.length === 0;
 
   return (
     <View style={styles.container}>
@@ -53,53 +112,84 @@ export default function ForumScreen() {
       </View>
 
       <FlatList
-        data={filteredRooms}
-        keyExtractor={(item) => item.id}
+        data={listData}
+        keyExtractor={(item, idx) =>
+          item.type === "room" ? item.room.id : `${item.type}-${idx}`
+        }
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            activeOpacity={0.8}
-            onPress={() =>
-              router.push({ pathname: "/forum-room", params: { roomId: item.id } })
-            }
-          >
-            <View style={styles.cardIcon}>
-              <MaterialIcons name="forum" size={28} color="#4169E1" />
-            </View>
-            <View style={styles.cardContent}>
-              <Text style={styles.cardTitle} numberOfLines={2}>
-                {item.articleTitle}
-              </Text>
-              <View style={styles.cardMeta}>
-                <MaterialIcons name="chat-bubble-outline" size={14} color="#999" />
-                <Text style={styles.cardMetaText}>
-                  {item.comments.length}{" "}
-                  {item.comments.length === 1 ? "comentário" : "comentários"}
-                </Text>
-                <Text style={styles.cardMetaDot}>·</Text>
-                <Text style={styles.cardMetaText}>
-                  {new Date(item.createdAt).toLocaleDateString("pt-BR")}
+        renderItem={({ item }) => {
+          if (item.type === "featured-label") {
+            return (
+              <View style={styles.sectionLabel}>
+                <MaterialIcons name="local-fire-department" size={15} color="#E63946" />
+                <Text style={styles.sectionLabelText}>Em destaque</Text>
+              </View>
+            );
+          }
+
+          if (item.type === "all-label") {
+            return (
+              <View style={styles.sectionLabel}>
+                <MaterialIcons name="access-time" size={15} color="#999" />
+                <Text style={[styles.sectionLabelText, styles.sectionLabelMuted]}>
+                  Mais recentes
                 </Text>
               </View>
-            </View>
-            <MaterialIcons name="chevron-right" size={24} color="#CCC" />
-          </TouchableOpacity>
-        )}
+            );
+          }
+
+          const { room, isFeatured } = item;
+          return (
+            <TouchableOpacity
+              style={[styles.card, isFeatured && styles.cardFeatured]}
+              activeOpacity={0.8}
+              onPress={() =>
+                router.push({ pathname: "/forum-room", params: { roomId: room.id } })
+              }
+            >
+              <View style={[styles.cardIcon, isFeatured && styles.cardIconFeatured]}>
+                {isFeatured ? (
+                  <MaterialIcons name="local-fire-department" size={26} color="#E63946" />
+                ) : (
+                  <MaterialIcons name="forum" size={26} color="#4169E1" />
+                )}
+              </View>
+              <View style={styles.cardContent}>
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                  {room.articleTitle}
+                </Text>
+                <View style={styles.cardMeta}>
+                  <MaterialIcons name="chat-bubble-outline" size={13} color="#999" />
+                  <Text style={styles.cardMetaText}>
+                    {room.comments.length}{" "}
+                    {room.comments.length === 1 ? "comentário" : "comentários"}
+                  </Text>
+                  <Text style={styles.cardMetaDot}>·</Text>
+                  <Text style={styles.cardMetaText}>
+                    {new Date(room.createdAt).toLocaleDateString("pt-BR")}
+                  </Text>
+                </View>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={isFeatured ? "#E63946" : "#CCC"} />
+            </TouchableOpacity>
+          );
+        }}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <MaterialIcons name="forum" size={60} color="#DDD" />
-            <Text style={styles.emptyStateText}>
-              {search.trim()
-                ? "Nenhuma sala encontrada"
-                : "Nenhuma sala de fórum criada ainda"}
-            </Text>
-            <Text style={styles.emptyStateSubtext}>
-              {search.trim()
-                ? "Tente buscar por outro termo"
-                : "Acesse uma notícia e crie a primeira sala!"}
-            </Text>
-          </View>
+          isEmpty ? (
+            <View style={styles.emptyState}>
+              <MaterialIcons name="forum" size={60} color="#DDD" />
+              <Text style={styles.emptyStateText}>
+                {search.trim()
+                  ? "Nenhuma sala encontrada"
+                  : "Nenhuma sala de fórum criada ainda"}
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                {search.trim()
+                  ? "Tente buscar por outro termo"
+                  : "Acesse uma notícia e crie a primeira sala!"}
+              </Text>
+            </View>
+          ) : null
         }
       />
     </View>
@@ -160,6 +250,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 30,
   },
+  sectionLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+    marginTop: 4,
+    paddingHorizontal: 2,
+  },
+  sectionLabelText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#E63946",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  sectionLabelMuted: {
+    color: "#999",
+  },
   card: {
     backgroundColor: "#FFF",
     borderRadius: 20,
@@ -169,6 +277,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 3,
   },
+  cardFeatured: {
+    backgroundColor: "#FFF5F5",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    elevation: 4,
+  },
   cardIcon: {
     width: 50,
     height: 50,
@@ -177,6 +291,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 14,
+  },
+  cardIconFeatured: {
+    backgroundColor: "#FFE4E6",
   },
   cardContent: {
     flex: 1,
