@@ -6,6 +6,7 @@ interface User {
   name: string;
   email: string;
   photo?: string;
+  profession?: string; // o que o usuário faz/trabalha
   likes: string[];    // e-mails de quem curtiu este perfil
   dislikes: string[]; // e-mails de quem não curtiu
   ttsEnabled: boolean;
@@ -22,7 +23,7 @@ interface AuthContextData {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  updateProfile: (name: string, photo?: string) => Promise<void>;
+  updateProfile: (name: string, photo?: string, profession?: string) => Promise<void>;
   toggleTTS: () => Promise<void>;
   toggleTheme: () => Promise<void>;
   handleProfileReaction: (
@@ -92,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       name: name.trim(),
       email: email.toLowerCase().trim(),
       photo: "",
+      profession: "",
       likes: [],
       dislikes: [],
       ttsEnabled: false,
@@ -111,10 +113,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }
 
   // ── Atualizar perfil ──
-  async function updateProfile(name: string, photo?: string) {
+  async function updateProfile(name: string, photo?: string, profession?: string) {
     if (!user) return;
     const newPhoto = photo ?? user.photo;
-    await saveAndSetUser({ ...user, name: name.trim(), photo: newPhoto });
+    const newProfession = profession !== undefined ? profession : user.profession;
+    await saveAndSetUser({ ...user, name: name.trim(), photo: newPhoto, profession: newProfession });
 
     // Sincroniza foto e nome nos comentários do fórum
     try {

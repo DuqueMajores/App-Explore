@@ -27,6 +27,7 @@ interface PublicUser {
   name: string;
   email: string;
   photo?: string;
+  profession?: string;
   likes: string[];
   dislikes: string[];
 }
@@ -115,6 +116,15 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
         </View>
 
         <Text style={styles.userName}>{target.name}</Text>
+
+        {/* Profissão (abaixo do nome, acima do email) */}
+        {!!target.profession && (
+          <View style={styles.professionRow}>
+            <MaterialIcons name="work-outline" size={14} color="#4169E1" />
+            <Text style={styles.professionText}>{target.profession}</Text>
+          </View>
+        )}
+
         <Text style={styles.userEmail}>{target.email}</Text>
 
         {/* Reações */}
@@ -177,6 +187,7 @@ export default function ProfileScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState("");
   const [editPhotoUrl, setEditPhotoUrl] = useState("");
+  const [editProfession, setEditProfession] = useState("");
   const [photoPreviewError, setPhotoPreviewError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -198,6 +209,7 @@ export default function ProfileScreen() {
   const openEditModal = () => {
     setEditName(user?.name ?? "");
     setEditPhotoUrl(user?.photo ?? "");
+    setEditProfession(user?.profession ?? "");
     setPhotoPreviewError(false);
     setEditModalVisible(true);
   };
@@ -227,7 +239,11 @@ export default function ProfileScreen() {
     }
     setIsSaving(true);
     try {
-      await updateProfile(editName.trim(), editPhotoUrl.trim() || undefined);
+      await updateProfile(
+        editName.trim(),
+        editPhotoUrl.trim() || undefined,
+        editProfession.trim()
+      );
       setEditModalVisible(false);
     } catch (error: any) {
       Alert.alert("Erro", error.message || "Não foi possível salvar as alterações.");
@@ -291,7 +307,10 @@ export default function ProfileScreen() {
   const isDark = user.darkMode;
 
   return (
-    <View style={[styles.container, isDark && styles.darkBg]}>
+    <ScrollView
+      style={[styles.container, isDark && styles.darkBg]}
+      contentContainerStyle={styles.scrollContent}
+    >
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -318,6 +337,15 @@ export default function ProfileScreen() {
           )}
         </View>
         <Text style={[styles.userName, isDark && styles.darkText]}>{user.name}</Text>
+
+        {/* Profissão (abaixo do nome, acima do email) */}
+        {!!user.profession && (
+          <View style={styles.professionRow}>
+            <MaterialIcons name="work-outline" size={14} color="#4169E1" />
+            <Text style={styles.professionText}>{user.profession}</Text>
+          </View>
+        )}
+
         <Text style={styles.userEmail}>{user.email}</Text>
 
         <View style={styles.reactionContainer}>
@@ -389,9 +417,8 @@ export default function ProfileScreen() {
         )}
       </TouchableOpacity>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Versão 1.0.0</Text>
-      </View>
+      {/* ── Footer ── */}
+      <Text style={styles.footerText}>Versão 1.0.0</Text>
 
       {/* ── Modal de Edição ── */}
       <Modal
@@ -455,6 +482,7 @@ export default function ProfileScreen() {
                 ))}
               </View>
 
+              {/* Nome */}
               <Text style={styles.inputLabel}>Nome</Text>
               <View style={styles.inputContainer}>
                 <MaterialIcons name="person" size={20} color="#999" style={{ marginRight: 10 }} />
@@ -469,6 +497,22 @@ export default function ProfileScreen() {
                 />
               </View>
 
+              {/* Profissão */}
+              <Text style={styles.inputLabel}>Profissão / O que você faz</Text>
+              <View style={styles.inputContainer}>
+                <MaterialIcons name="work-outline" size={20} color="#999" style={{ marginRight: 10 }} />
+                <TextInput
+                  style={styles.textInput}
+                  value={editProfession}
+                  onChangeText={setEditProfession}
+                  placeholder="Ex: Desenvolvedor, Designer, Estudante..."
+                  placeholderTextColor="#CCC"
+                  maxLength={60}
+                  editable={!isSaving}
+                />
+              </View>
+
+              {/* Foto URL */}
               <Text style={styles.inputLabel}>Foto de perfil (URL)</Text>
               <View style={[styles.inputContainer, { alignItems: "flex-start", paddingTop: 14 }]}>
                 <MaterialIcons name="link" size={20} color="#999" style={{ marginRight: 10, marginTop: 2 }} />
@@ -516,13 +560,14 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8F9FA" },
+  scrollContent: { paddingBottom: 40 },
   darkBg: { backgroundColor: "#121212" },
   darkCard: { backgroundColor: "#1E1E1E" },
   darkText: { color: "#FFF" },
@@ -579,7 +624,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   avatarText: { color: "#FFF", fontSize: 40, fontWeight: "bold" },
-  userName: { fontSize: 24, fontWeight: "800", color: "#212529", marginBottom: 4 },
+  userName: { fontSize: 24, fontWeight: "800", color: "#212529", marginBottom: 6 },
+  professionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 4,
+  },
+  professionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4169E1",
+  },
   userEmail: { color: "#666", fontSize: 14, marginBottom: 16 },
   reactionContainer: { flexDirection: "row", alignItems: "center", gap: 10 },
   reactionButton: { padding: 6 },
@@ -623,8 +679,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     flex: 1,
   },
-  footer: { position: "absolute", bottom: 20, width: "100%", alignItems: "center" },
-  footerText: { fontSize: 12, color: "#999" },
+  footerText: {
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 24,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
