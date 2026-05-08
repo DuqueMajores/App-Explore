@@ -117,7 +117,6 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
 
         <Text style={styles.userName}>{target.name}</Text>
 
-        {/* Profissão (abaixo do nome, acima do email) */}
         {!!target.profession && (
           <View style={styles.professionRow}>
             <MaterialIcons name="work-outline" size={14} color="#4169E1" />
@@ -127,21 +126,8 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
 
         <Text style={styles.userEmail}>{target.email}</Text>
 
-        {/* Reações */}
+        {/* Reações — dislike primeiro, like depois */}
         <View style={styles.reactionContainer}>
-          <TouchableOpacity
-            style={styles.reactionButton}
-            onPress={() => handleReact("like")}
-            disabled={isSelf || !loggedUser}
-          >
-            <MaterialIcons
-              name="thumb-up"
-              size={26}
-              color={likedByMe ? "#4169E1" : "#CCC"}
-            />
-          </TouchableOpacity>
-          <Text style={styles.reactionCount}>{target.likes?.length ?? 0}</Text>
-
           <TouchableOpacity
             style={styles.reactionButton}
             onPress={() => handleReact("dislike")}
@@ -154,6 +140,19 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
             />
           </TouchableOpacity>
           <Text style={styles.reactionCount}>{target.dislikes?.length ?? 0}</Text>
+
+          <TouchableOpacity
+            style={styles.reactionButton}
+            onPress={() => handleReact("like")}
+            disabled={isSelf || !loggedUser}
+          >
+            <MaterialIcons
+              name="thumb-up"
+              size={26}
+              color={likedByMe ? "#4169E1" : "#CCC"}
+            />
+          </TouchableOpacity>
+          <Text style={styles.reactionCount}>{target.likes?.length ?? 0}</Text>
         </View>
 
         {isSelf && (
@@ -191,8 +190,6 @@ export default function ProfileScreen() {
   const [photoPreviewError, setPhotoPreviewError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Redireciona para perfil do outro usuário se o param veio preenchido
-  // e não é o próprio usuário logado
   if (viewUserEmail && viewUserEmail !== user?.email) {
     return <OtherUserProfile targetEmail={viewUserEmail} />;
   }
@@ -338,7 +335,6 @@ export default function ProfileScreen() {
         </View>
         <Text style={[styles.userName, isDark && styles.darkText]}>{user.name}</Text>
 
-        {/* Profissão (abaixo do nome, acima do email) */}
         {!!user.profession && (
           <View style={styles.professionRow}>
             <MaterialIcons name="work-outline" size={14} color="#4169E1" />
@@ -348,20 +344,8 @@ export default function ProfileScreen() {
 
         <Text style={styles.userEmail}>{user.email}</Text>
 
+        {/* Reações — dislike primeiro, like depois */}
         <View style={styles.reactionContainer}>
-          <TouchableOpacity
-            onPress={() => handleProfileReaction(user.email, "like")}
-            style={styles.reactionButton}
-          >
-            <MaterialIcons
-              name="thumb-up"
-              size={24}
-              color={(user.likes ?? []).includes(user.email) ? "#4169E1" : "#999"}
-            />
-          </TouchableOpacity>
-          <Text style={[styles.reactionCount, isDark && styles.darkText]}>
-            {user.likes?.length ?? 0}
-          </Text>
           <TouchableOpacity
             onPress={() => handleProfileReaction(user.email, "dislike")}
             style={styles.reactionButton}
@@ -374,6 +358,20 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           <Text style={[styles.reactionCount, isDark && styles.darkText]}>
             {user.dislikes?.length ?? 0}
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => handleProfileReaction(user.email, "like")}
+            style={styles.reactionButton}
+          >
+            <MaterialIcons
+              name="thumb-up"
+              size={24}
+              color={(user.likes ?? []).includes(user.email) ? "#4169E1" : "#999"}
+            />
+          </TouchableOpacity>
+          <Text style={[styles.reactionCount, isDark && styles.darkText]}>
+            {user.likes?.length ?? 0}
           </Text>
         </View>
       </View>

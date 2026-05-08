@@ -78,7 +78,7 @@ function UserCard({
         router.push({ pathname: '/perfil', params: { viewUserEmail: user.email } })
       }
     >
-      {/* Rank badge for top sections */}
+      {/* Rank badge */}
       {rank !== undefined && (
         <View
           style={[
@@ -90,7 +90,7 @@ function UserCard({
         </View>
       )}
 
-      {/* Icon area */}
+      {/* Avatar */}
       <View
         style={[
           styles.cardIcon,
@@ -101,7 +101,7 @@ function UserCard({
         <UserAvatar user={user} size={42} />
       </View>
 
-      {/* Content */}
+      {/* Nome + email */}
       <View style={styles.cardContent}>
         <Text style={styles.cardName} numberOfLines={1}>
           {user.name}
@@ -109,23 +109,17 @@ function UserCard({
         <Text style={styles.cardEmail} numberOfLines={1}>
           {user.email}
         </Text>
-
-        <View style={styles.cardMeta}>
-          <MaterialIcons name="thumb-up" size={13} color="#4169E1" />
-          <Text style={styles.cardMetaText}>{user.likes?.length ?? 0}</Text>
-          <Text style={styles.cardMetaDot}>·</Text>
-          <MaterialIcons name="thumb-down" size={13} color="#E63946" />
-          <Text style={styles.cardMetaText}>{user.dislikes?.length ?? 0}</Text>
-        </View>
       </View>
 
-      <MaterialIcons
-        name="chevron-right"
-        size={24}
-        color={
-          isFeaturedLiked ? '#4169E1' : isFeaturedDisliked ? '#E63946' : '#CCC'
-        }
-      />
+      {/* Contadores — dislike primeiro, like depois, alinhados à direita */}
+      <View style={styles.cardMeta}>
+        <MaterialIcons name="thumb-down" size={13} color="#E63946" />
+        <Text style={styles.cardMetaText}>{user.dislikes?.length ?? 0}</Text>
+        <Text style={styles.cardMetaDot}>·</Text>
+        <MaterialIcons name="thumb-up" size={13} color="#4169E1" />
+        <Text style={styles.cardMetaText}>{user.likes?.length ?? 0}</Text>
+      </View>
+
     </TouchableOpacity>
   );
 }
@@ -139,7 +133,6 @@ export default function RedeScreen() {
     (async () => {
       const raw = await AsyncStorage.getItem('@App:users');
       const parsed: any[] = raw ? JSON.parse(raw) : [];
-      // Strip passwordHash from each user
       const clean: StoredUser[] = parsed.map(({ passwordHash, ...u }) => ({
         ...u,
         likes: Array.isArray(u.likes) ? u.likes : [],
@@ -149,7 +142,6 @@ export default function RedeScreen() {
     })();
   }, []);
 
-  // Reset pagination on search change
   const handleSearch = (text: string) => {
     setSearch(text);
     setVisibleCount(PAGE_SIZE);
@@ -174,7 +166,6 @@ export default function RedeScreen() {
       return { listData: items, hiddenCount: filtered.length - visibleCount };
     }
 
-    // Sort by likes descending → top liked
     const byLikes = [...users].sort(
       (a, b) => (b.likes?.length ?? 0) - (a.likes?.length ?? 0)
     );
@@ -183,7 +174,6 @@ export default function RedeScreen() {
       .slice(0, TOP_LIKED_COUNT);
     const topLikedIds = new Set(topLiked.map((u) => u.email));
 
-    // Sort by dislikes descending → top disliked (excluding already in topLiked)
     const byDislikes = [...users]
       .filter((u) => !topLikedIds.has(u.email))
       .sort((a, b) => (b.dislikes?.length ?? 0) - (a.dislikes?.length ?? 0));
@@ -192,7 +182,6 @@ export default function RedeScreen() {
       .slice(0, TOP_DISLIKED_COUNT);
     const topDislikedIds = new Set(topDisliked.map((u) => u.email));
 
-    // Remaining users (not in either top list)
     const remaining = users.filter(
       (u) => !topLikedIds.has(u.email) && !topDislikedIds.has(u.email)
     );
@@ -206,14 +195,12 @@ export default function RedeScreen() {
         items.push({ type: 'user', user, badge: 'liked' })
       );
     }
-
     if (topDisliked.length > 0) {
       items.push({ type: 'top-disliked-label' });
       topDisliked.forEach((user) =>
         items.push({ type: 'user', user, badge: 'disliked' })
       );
     }
-
     if (remaining.length > 0) {
       items.push({ type: 'all-label' });
       visibleRemaining.forEach((user) =>
@@ -232,10 +219,8 @@ export default function RedeScreen() {
 
   const isEmpty = users.length === 0;
 
-  // Compute rank within badge group for rendering
-  const getRank = (item: ListItem & { type: 'user' }, index: number): number | undefined => {
+  const getRank = (item: ListItem & { type: 'user' }): number | undefined => {
     if (item.badge === 'none') return undefined;
-    // Count how many 'user' items with same badge appear before this one in listData
     let rank = 1;
     for (const d of listData) {
       if (d === item) break;
@@ -290,7 +275,6 @@ export default function RedeScreen() {
               </View>
             );
           }
-
           if (item.type === 'top-disliked-label') {
             return (
               <View style={styles.sectionLabel}>
@@ -301,7 +285,6 @@ export default function RedeScreen() {
               </View>
             );
           }
-
           if (item.type === 'all-label') {
             return (
               <View style={styles.sectionLabel}>
@@ -312,12 +295,9 @@ export default function RedeScreen() {
               </View>
             );
           }
-
           if (item.type === 'user') {
-            const rank = getRank(item, 0);
-            return <UserCard user={item.user} badge={item.badge} rank={rank} />;
+            return <UserCard user={item.user} badge={item.badge} rank={getRank(item)} />;
           }
-
           if (item.type === 'show-more') {
             const next = Math.min(PAGE_SIZE, hiddenCount);
             return (
@@ -334,7 +314,6 @@ export default function RedeScreen() {
               </TouchableOpacity>
             );
           }
-
           return null;
         }}
         ListEmptyComponent={
@@ -356,10 +335,7 @@ export default function RedeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -377,11 +353,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 2,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#212529',
-  },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#212529' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -393,22 +365,10 @@ const styles = StyleSheet.create({
     elevation: 2,
     height: 48,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#333',
-    paddingVertical: 0,
-  },
-  clearButton: {
-    padding: 4,
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-  },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: '#333', paddingVertical: 0 },
+  clearButton: { padding: 4 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 30 },
   sectionLabel: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -424,12 +384,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
-  sectionLabelDisliked: {
-    color: '#E63946',
-  },
-  sectionLabelMuted: {
-    color: '#999',
-  },
+  sectionLabelDisliked: { color: '#E63946' },
+  sectionLabelMuted: { color: '#999' },
   card: {
     backgroundColor: '#FFF',
     borderRadius: 20,
@@ -454,22 +410,14 @@ const styles = StyleSheet.create({
   rankBadge: {
     position: 'absolute',
     top: 10,
-    right: 44,
+    right: 20,
     borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  rankBadgeLiked: {
-    backgroundColor: '#C7D2FE',
-  },
-  rankBadgeDisliked: {
-    backgroundColor: '#FECACA',
-  },
-  rankBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#444',
-  },
+  rankBadgeLiked: { backgroundColor: '#C7D2FE' },
+  rankBadgeDisliked: { backgroundColor: '#FECACA' },
+  rankBadgeText: { fontSize: 11, fontWeight: '800', color: '#444' },
   cardIcon: {
     width: 50,
     height: 50,
@@ -480,49 +428,27 @@ const styles = StyleSheet.create({
     marginRight: 14,
     overflow: 'hidden',
   },
-  cardIconLiked: {
-    backgroundColor: '#C7D2FE',
-  },
-  cardIconDisliked: {
-    backgroundColor: '#FECACA',
-  },
-  cardContent: {
-    flex: 1,
-  },
-  cardName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#212529',
-    marginBottom: 2,
-  },
-  cardEmail: {
-    fontSize: 13,
-    color: '#999',
-    marginBottom: 6,
-  },
+  cardIconLiked: { backgroundColor: '#C7D2FE' },
+  cardIconDisliked: { backgroundColor: '#FECACA' },
+  cardContent: { flex: 1 },
+  cardName: { fontSize: 16, fontWeight: '700', color: '#212529', marginBottom: 2 },
+  cardEmail: { fontSize: 13, color: '#999' },
+  /* contadores à direita, antes do chevron */
   cardMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginRight: 6,
+    marginTop: 30,
   },
-  cardMetaText: {
-    fontSize: 13,
-    color: '#999',
-  },
-  cardMetaDot: {
-    fontSize: 13,
-    color: '#CCC',
-    marginHorizontal: 2,
-  },
+  cardMetaText: { fontSize: 13, color: '#999' },
+  cardMetaDot: { fontSize: 13, color: '#CCC', marginHorizontal: 2 },
   avatarFallback: {
     backgroundColor: '#4169E1',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarFallbackText: {
-    color: '#FFF',
-    fontWeight: '700',
-  },
+  avatarFallbackText: { color: '#FFF', fontWeight: '700' },
   showMoreButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -536,26 +462,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#C7D2FE',
   },
-  showMoreText: {
-    fontSize: 14,
-    color: '#4169E1',
-    fontWeight: '700',
-  },
+  showMoreText: { fontSize: 14, color: '#4169E1', fontWeight: '700' },
   emptyState: {
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 80,
   },
-  emptyStateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#999',
-    marginTop: 15,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#CCC',
-    marginTop: 5,
-    textAlign: 'center',
-  },
+  emptyStateText: { fontSize: 16, fontWeight: '600', color: '#999', marginTop: 15 },
+  emptyStateSubtext: { fontSize: 14, color: '#CCC', marginTop: 5, textAlign: 'center' },
 });

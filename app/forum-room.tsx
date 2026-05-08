@@ -152,6 +152,7 @@ function CommentCard({
         {comment.text}
       </Text>
 
+      {/* Actions — responder + coração juntos, alinhados à direita */}
       <View style={styles.commentActions}>
         {!isRoot && (
           <TouchableOpacity
@@ -268,7 +269,6 @@ export default function ForumRoomScreen() {
   const [text, setText] = useState("");
   const [replyingTo, setReplyingTo] = useState<ForumComment | null>(null);
   const [sending, setSending] = useState(false);
-  // how many "remaining" comments (after top 3) are visible
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const flatListRef = useRef<FlatList>(null);
   const localRouter = useRouter();
@@ -351,7 +351,6 @@ export default function ForumRoomScreen() {
     }
   }, [text, user, room, sending, addComment, replyingTo, sendNotification]);
 
-  // ── Derived comment lists ──────────────────────────────────────────────────
   const { rootComment, topComments, remainingComments, allSorted } = useMemo(() => {
     if (!room) return { rootComment: null, topComments: [], remainingComments: [], allSorted: [] };
 
@@ -361,12 +360,10 @@ export default function ForumRoomScreen() {
 
     const root = sorted.find((c) => c.parentId === null) ?? null;
 
-    // Only top-level (non-root) comments participate in top 3 + remaining
     const topLevel = sorted.filter(
       (c) => c.parentId === null && c.id !== root?.id
     );
 
-    // Sort top-level by likes descending to pick the top 3
     const byLikes = [...topLevel].sort(
       (a, b) => (b.likes?.length ?? 0) - (a.likes?.length ?? 0)
     );
@@ -378,10 +375,7 @@ export default function ForumRoomScreen() {
         .map((c) => c.id)
     );
 
-    const top = byLikes
-      .filter((c) => topIds.has(c.id));
-
-    // Remaining = top-level not in top, in chronological order
+    const top = byLikes.filter((c) => topIds.has(c.id));
     const remaining = topLevel.filter((c) => !topIds.has(c.id));
 
     return { rootComment: root, topComments: top, remainingComments: remaining, allSorted: sorted };
@@ -797,9 +791,11 @@ const styles = StyleSheet.create({
   commentDate: { fontSize: 12, color: "#999", marginTop: 1 },
   commentText: { fontSize: 15, lineHeight: 22, color: "#444" },
   commentTextRoot: { fontSize: 16, lineHeight: 24, color: "#212529" },
+  /* actions: responder + coração juntos, empurrados para a direita */
   commentActions: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
     marginTop: 8,
     gap: 12,
   },
@@ -818,6 +814,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
     marginBottom: 6,
+    marginLeft: 210,
     gap: 4,
   },
   showRepliesText: { fontSize: 13, color: "#4169E1", fontWeight: "600" },
