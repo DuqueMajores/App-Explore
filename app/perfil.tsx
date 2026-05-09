@@ -14,8 +14,16 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Dimensions,
+  FlatList,
 } from "react-native";
 import { useAuth } from "../src/context/AuthContext";
+import { useGallery, GalleryPhoto } from "../src/context/GalleryContex";
+import StoryRing from "../components/StoryRing";
+
+const { width } = Dimensions.get("window");
+const GALLERY_COL = 3;
+const GALLERY_SIZE = (width - 40 - 20 - (GALLERY_COL - 1) * 4) / GALLERY_COL;
 
 const PRESET_AVATARS = [
   "https://imagetourl.cloud/usr5cr0j.png",
@@ -32,7 +40,243 @@ interface PublicUser {
   dislikes: string[];
 }
 
-// ── Perfil de outro usuário (somente leitura) ─────────────────────────────────
+// ── Mini-galeria no perfil ─────────────────────────────────────────────────────
+function ProfileGallery({
+  userEmail,
+  currentUserEmail,
+}: {
+  userEmail: string;
+  currentUserEmail?: string;
+}) {
+  const { getPhotosByUser, toggleLike, deletePhoto } = useGallery();
+  const [selected, setSelected] = useState<GalleryPhoto | null>(null);
+  const photos = getPhotosByUser(userEmail);
+
+  const timeLeft = (photo: GalleryPhoto) => {
+    const diff = new Date(photo.expiresAt).getTime() - Date.now();
+    const h = Math.floor(diff / 3_600_000);
+    const m = Math.floor((diff % 3_600_000) / 60_000);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  };
+
+  return (
+    <View style={galStyles.card}>
+      <View style={galStyles.cardHeader}>
+        <MaterialIcons name="photo-library" size={20} color="#4169E1" />
+        <Text style={galStyles.cardTitle}>Galeria</Text>
+        <Text style={galStyles.cardSub}>
+          {photos.length === 0
+            ? "Nenhuma foto ativa"
+            : `${photos.length} foto${photos.length > 1 ? "s" : ""} · 24h`}
+        </Text>
+      </View>
+
+      {photos.length === 0 ? (
+        <View style={galStyles.empty}>
+          <MaterialIcons name="add-photo-alternate" size={36} color="#DDD" />
+          <Text style={galStyles.emptyText}>Publique fotos no seu story!</Text>
+        </View>
+      ) : (
+        <View style={galStyles.grid}>
+          {photos.map((photo) => {
+            const liked = currentUserEmail
+              ? photo.likes.includes(currentUserEmail)
+              : false;
+            return (
+              <TouchableOpacity
+                key={photo.id}
+                style={galStyles.thumb}
+                activeOpacity={0.85}
+                onPress={() => setSelected(photo)}
+              >
+                <Image
+                  source={{ uri: photo.imageUri }}
+                  style={galStyles.thumbImg}
+                  resizeMode="cover"
+                />
+                {photo.likes.length > 0 && (
+                  <View style={galStyles.thumbBadge}>
+                    <MaterialIcons
+                      name="favorite"
+                      size={10}
+                      color="#FF6B6B"
+                    />
+                    <Text style={galStyles.thumbLikes}>
+                      {photo.likes.length}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Modal de foto ampliada */}
+      {selected && (
+        <Modal
+          visible={!!selected}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setSelected(null)}
+        >
+          <View style={galStyles.modalBg}>
+            <TouchableOpacity
+              style={galStyles.modalClose}
+              onPress={() => setSelected(null)}
+            >
+              <MaterialIcons name="close" size={28} color="#FFF" />
+            </TouchableOpacity>
+            <Image
+              source={{ uri: selected.imageUri }}
+              style={galStyles.modalImg}
+              resizeMode="contain"
+            />
+            <View style={galStyles.modalFooter}>
+              <Text style={galStyles.modalExpiry}>
+                Expira em {timeLeft(selected)}
+              </Text>
+              <View style={galStyles.modalActions}>
+                {currentUserEmail && currentUserEmail !== selected.userEmail ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      toggleLike(selected.id, currentUserEmail!);
+                      setSelected((prev) => {
+                        if (!prev || !currentUserEmail) return prev;
+                        const liked = prev.likes.includes(currentUserEmail);
+                        return {
+                          ...prev,
+                          likes: liked
+                            ? prev.likes.filter((e) => e !== currentUserEmail)
+                            : [...prev.likes, currentUserEmail],
+                        };
+                      });
+                    }}
+                    style={galStyles.modalActionBtn}
+                  >
+                    <MaterialIcons
+                      name={
+                        currentUserEmail &&
+                        selected.likes.includes(currentUserEmail)
+                          ? "favorite"
+                          : "favorite-border"
+                      }
+                      size={28}
+                      color={
+                        currentUserEmail &&
+                        selected.likes.includes(currentUserEmail)
+                          ? "#FF6B6B"
+                          : "#FFF"
+                      }
+                    />
+                    <Text style={galStyles.modalLikeCount}>
+                      {selected.likes.length}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {currentUserEmail === selected.userEmail && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      deletePhoto(selected.id);
+                      setSelected(null);
+                    }}
+                    style={galStyles.modalActionBtn}
+                  >
+                    <MaterialIcons
+                      name="delete-outline"
+                      size={28}
+                      color="#FF6B6B"
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+    </View>
+  );
+}
+
+const galStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    overflow: "hidden",
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: "#212529", flex: 1 },
+  cardSub: { fontSize: 12, color: "#999" },
+  empty: { alignItems: "center", paddingVertical: 24, gap: 8 },
+  emptyText: { fontSize: 13, color: "#BBB" },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  thumb: {
+    width: GALLERY_SIZE,
+    height: GALLERY_SIZE,
+    margin: 2,
+    position: "relative",
+  },
+  thumbImg: { width: "100%", height: "100%" },
+  thumbBadge: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  thumbLikes: { color: "#FFF", fontSize: 10, fontWeight: "700" },
+  modalBg: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+  },
+  modalClose: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 6,
+  },
+  modalImg: { width: "100%", height: "70%" },
+  modalFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    paddingBottom: 40,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalExpiry: { color: "rgba(255,255,255,0.7)", fontSize: 13 },
+  modalActions: { flexDirection: "row", gap: 16 },
+  modalActionBtn: { alignItems: "center", gap: 4 },
+  modalLikeCount: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+});
+
+// ── Perfil de outro usuário ───────────────────────────────────────────────────
 function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
   const { user: loggedUser, handleProfileReaction } = useAuth();
   const [target, setTarget] = useState<PublicUser | null>(null);
@@ -87,11 +331,15 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
   }
 
   const isSelf = loggedUser?.email === target.email;
-  const likedByMe = loggedUser ? (target.likes ?? []).includes(loggedUser.email) : false;
-  const dislikedByMe = loggedUser ? (target.dislikes ?? []).includes(loggedUser.email) : false;
+  const likedByMe = loggedUser
+    ? (target.likes ?? []).includes(loggedUser.email)
+    : false;
+  const dislikedByMe = loggedUser
+    ? (target.dislikes ?? []).includes(loggedUser.email)
+    : false;
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -104,15 +352,13 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
       {/* Avatar + info */}
       <View style={styles.profileSection}>
         <View style={styles.avatarWrapper}>
-          {target.photo ? (
-            <Image source={{ uri: target.photo }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarLarge}>
-              <Text style={styles.avatarText}>
-                {target.name.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
+          <StoryRing
+            userEmail={target.email}
+            userName={target.name}
+            userPhoto={target.photo}
+            size={90}
+            currentUserEmail={loggedUser?.email}
+          />
         </View>
 
         <Text style={styles.userName}>{target.name}</Text>
@@ -126,7 +372,6 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
 
         <Text style={styles.userEmail}>{target.email}</Text>
 
-        {/* Reações — dislike primeiro, like depois */}
         <View style={styles.reactionContainer}>
           <TouchableOpacity
             style={styles.reactionButton}
@@ -163,6 +408,12 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
         )}
       </View>
 
+      {/* Galeria pública do usuário */}
+      <ProfileGallery
+        userEmail={target.email}
+        currentUserEmail={loggedUser?.email}
+      />
+
       {/* Info card */}
       <View style={styles.infoSection}>
         <View style={styles.infoCard}>
@@ -173,14 +424,16 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
           </View>
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
-// ── Perfil próprio ────────────────────────────────────────────────────────────
+// ── Perfil próprio ─────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const { viewUserEmail } = useLocalSearchParams<{ viewUserEmail?: string }>();
-  const { user, signOut, updateProfile, handleProfileReaction, loading } = useAuth();
+  const { user, signOut, updateProfile, handleProfileReaction, loading } =
+    useAuth();
+  const { addPhoto, getPhotosByUser } = useGallery();
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -229,6 +482,31 @@ export default function ProfileScreen() {
     }
   };
 
+  // ── Adicionar foto ao story ────────────────────────────────────────────────
+  const handleAddStoryPhoto = async () => {
+    if (!user) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permissão negada", "Precisamos de acesso à sua galeria.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 5],
+      quality: 0.85,
+    });
+    if (!result.canceled) {
+      await addPhoto(
+        user.email,
+        user.name,
+        user.photo,
+        result.assets[0].uri
+      );
+      Alert.alert("✅ Foto publicada!", "Sua foto ficará visível por 24 horas.");
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (!editName.trim() || editName.trim().length < 2) {
       Alert.alert("Nome inválido", "O nome deve ter no mínimo 2 caracteres.");
@@ -243,7 +521,10 @@ export default function ProfileScreen() {
       );
       setEditModalVisible(false);
     } catch (error: any) {
-      Alert.alert("Erro", error.message || "Não foi possível salvar as alterações.");
+      Alert.alert(
+        "Erro",
+        error.message || "Não foi possível salvar as alterações."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -310,10 +591,19 @@ export default function ProfileScreen() {
     >
       {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <MaterialIcons name="arrow-back" size={24} color={isDark ? "#FFF" : "#333"} />
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <MaterialIcons
+            name="arrow-back"
+            size={24}
+            color={isDark ? "#FFF" : "#333"}
+          />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, isDark && styles.darkText]}>Meu Perfil</Text>
+        <Text style={[styles.headerTitle, isDark && styles.darkText]}>
+          Meu Perfil
+        </Text>
         <TouchableOpacity style={styles.editButton} onPress={openEditModal}>
           <MaterialIcons name="edit" size={20} color="#4169E1" />
           <Text style={styles.editButtonText}>Editar</Text>
@@ -322,18 +612,22 @@ export default function ProfileScreen() {
 
       {/* ── Profile Section ── */}
       <View style={[styles.profileSection, isDark && styles.darkCard]}>
+        {/* StoryRing com botão "+" */}
         <View style={styles.avatarWrapper}>
-          {user.photo ? (
-            <Image source={{ uri: user.photo }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarLarge}>
-              <Text style={styles.avatarText}>
-                {user.name.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
+          <StoryRing
+            userEmail={user.email}
+            userName={user.name}
+            userPhoto={user.photo}
+            size={90}
+            isOwn
+            onAddPhoto={handleAddStoryPhoto}
+            currentUserEmail={user.email}
+          />
         </View>
-        <Text style={[styles.userName, isDark && styles.darkText]}>{user.name}</Text>
+
+        <Text style={[styles.userName, isDark && styles.darkText]}>
+          {user.name}
+        </Text>
 
         {!!user.profession && (
           <View style={styles.professionRow}>
@@ -344,7 +638,7 @@ export default function ProfileScreen() {
 
         <Text style={styles.userEmail}>{user.email}</Text>
 
-        {/* Reações — dislike primeiro, like depois */}
+        {/* Reações */}
         <View style={styles.reactionContainer}>
           <TouchableOpacity
             onPress={() => handleProfileReaction(user.email, "dislike")}
@@ -353,7 +647,11 @@ export default function ProfileScreen() {
             <MaterialIcons
               name="thumb-down"
               size={24}
-              color={(user.dislikes ?? []).includes(user.email) ? "#E63946" : "#999"}
+              color={
+                (user.dislikes ?? []).includes(user.email)
+                  ? "#E63946"
+                  : "#999"
+              }
             />
           </TouchableOpacity>
           <Text style={[styles.reactionCount, isDark && styles.darkText]}>
@@ -367,14 +665,30 @@ export default function ProfileScreen() {
             <MaterialIcons
               name="thumb-up"
               size={24}
-              color={(user.likes ?? []).includes(user.email) ? "#4169E1" : "#999"}
+              color={
+                (user.likes ?? []).includes(user.email) ? "#4169E1" : "#999"
+              }
             />
           </TouchableOpacity>
           <Text style={[styles.reactionCount, isDark && styles.darkText]}>
             {user.likes?.length ?? 0}
           </Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.addStoryBtn}
+          onPress={handleAddStoryPhoto}
+        >
+          <MaterialIcons name="add-photo-alternate" size={18} color="#4169E1" />
+          <Text style={styles.addStoryBtnText}>Publicar foto no story</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* ── Galeria do próprio usuário ── */}
+      <ProfileGallery
+        userEmail={user.email}
+        currentUserEmail={user.email}
+      />
 
       {/* ── Info Section ── */}
       <View style={styles.infoSection}>
@@ -382,7 +696,9 @@ export default function ProfileScreen() {
           <MaterialIcons name="verified-user" size={24} color="#4169E1" />
           <View style={styles.infoContent}>
             <Text style={styles.infoLabel}>Status</Text>
-            <Text style={[styles.infoValue, isDark && styles.darkText]}>Conta Ativa</Text>
+            <Text style={[styles.infoValue, isDark && styles.darkText]}>
+              Conta Ativa
+            </Text>
           </View>
         </View>
         <View style={[styles.infoCard, isDark && styles.darkCard]}>
@@ -415,7 +731,6 @@ export default function ProfileScreen() {
         )}
       </TouchableOpacity>
 
-      {/* ── Footer ── */}
       <Text style={styles.footerText}>Versão 1.0.0</Text>
 
       {/* ── Modal de Edição ── */}
@@ -454,12 +769,19 @@ export default function ProfileScreen() {
                 )}
               </View>
 
-              <TouchableOpacity style={styles.galleryBtn} onPress={pickFromGallery}>
+              <TouchableOpacity
+                style={styles.galleryBtn}
+                onPress={pickFromGallery}
+              >
                 <MaterialIcons name="photo-library" size={20} color="#FFF" />
-                <Text style={styles.galleryBtnText}>Escolher da Galeria</Text>
+                <Text style={styles.galleryBtnText}>
+                  Escolher da Galeria
+                </Text>
               </TouchableOpacity>
 
-              <Text style={styles.inputLabel}>Ou escolha um personagem:</Text>
+              <Text style={styles.inputLabel}>
+                Ou escolha um personagem:
+              </Text>
               <View style={styles.presetRow}>
                 {PRESET_AVATARS.map((url) => (
                   <TouchableOpacity
@@ -483,7 +805,12 @@ export default function ProfileScreen() {
               {/* Nome */}
               <Text style={styles.inputLabel}>Nome</Text>
               <View style={styles.inputContainer}>
-                <MaterialIcons name="person" size={20} color="#999" style={{ marginRight: 10 }} />
+                <MaterialIcons
+                  name="person"
+                  size={20}
+                  color="#999"
+                  style={{ marginRight: 10 }}
+                />
                 <TextInput
                   style={styles.textInput}
                   value={editName}
@@ -496,9 +823,16 @@ export default function ProfileScreen() {
               </View>
 
               {/* Profissão */}
-              <Text style={styles.inputLabel}>Profissão / O que você faz</Text>
+              <Text style={styles.inputLabel}>
+                Profissão / O que você faz
+              </Text>
               <View style={styles.inputContainer}>
-                <MaterialIcons name="work-outline" size={20} color="#999" style={{ marginRight: 10 }} />
+                <MaterialIcons
+                  name="work-outline"
+                  size={20}
+                  color="#999"
+                  style={{ marginRight: 10 }}
+                />
                 <TextInput
                   style={styles.textInput}
                   value={editProfession}
@@ -512,8 +846,18 @@ export default function ProfileScreen() {
 
               {/* Foto URL */}
               <Text style={styles.inputLabel}>Foto de perfil (URL)</Text>
-              <View style={[styles.inputContainer, { alignItems: "flex-start", paddingTop: 14 }]}>
-                <MaterialIcons name="link" size={20} color="#999" style={{ marginRight: 10, marginTop: 2 }} />
+              <View
+                style={[
+                  styles.inputContainer,
+                  { alignItems: "flex-start", paddingTop: 14 },
+                ]}
+              >
+                <MaterialIcons
+                  name="link"
+                  size={20}
+                  color="#999"
+                  style={{ marginRight: 10, marginTop: 2 }}
+                />
                 <TextInput
                   style={[styles.textInput, { minHeight: 44 }]}
                   value={editPhotoUrl}
@@ -537,21 +881,33 @@ export default function ProfileScreen() {
               )}
 
               {editPhotoUrl.trim().length > 0 && (
-                <TouchableOpacity style={styles.removePhotoButton} onPress={handleRemovePhoto}>
-                  <MaterialIcons name="delete-outline" size={16} color="#E63946" />
+                <TouchableOpacity
+                  style={styles.removePhotoButton}
+                  onPress={handleRemovePhoto}
+                >
+                  <MaterialIcons
+                    name="delete-outline"
+                    size={16}
+                    color="#E63946"
+                  />
                   <Text style={styles.removePhotoText}>Remover foto</Text>
                 </TouchableOpacity>
               )}
 
               <TouchableOpacity
-                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                style={[
+                  styles.saveButton,
+                  isSaving && styles.saveButtonDisabled,
+                ]}
                 onPress={handleSaveProfile}
                 disabled={isSaving}
               >
                 {isSaving ? (
                   <ActivityIndicator color="#FFF" size="small" />
                 ) : (
-                  <Text style={styles.saveButtonText}>Salvar alterações</Text>
+                  <Text style={styles.saveButtonText}>
+                    Salvar alterações
+                  </Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
@@ -562,7 +918,7 @@ export default function ProfileScreen() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8F9FA" },
   scrollContent: { paddingBottom: 40 },
@@ -608,38 +964,55 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     marginHorizontal: 20,
     marginTop: 10,
+    marginBottom: 14,
     borderRadius: 20,
     elevation: 2,
   },
   avatarWrapper: { marginBottom: 16 },
-  avatarImage: { width: 100, height: 100, borderRadius: 50 },
-  avatarLarge: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#4169E1",
-    justifyContent: "center",
-    alignItems: "center",
+  userName: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#212529",
+    marginBottom: 6,
   },
-  avatarText: { color: "#FFF", fontSize: 40, fontWeight: "bold" },
-  userName: { fontSize: 24, fontWeight: "800", color: "#212529", marginBottom: 6 },
   professionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     marginBottom: 4,
   },
-  professionText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#4169E1",
-  },
+  professionText: { fontSize: 13, fontWeight: "600", color: "#4169E1" },
   userEmail: { color: "#666", fontSize: 14, marginBottom: 16 },
-  reactionContainer: { flexDirection: "row", alignItems: "center", gap: 10 },
+  reactionContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 16,
+  },
   reactionButton: { padding: 6 },
   reactionCount: { fontWeight: "bold", color: "#333", fontSize: 15 },
-  selfNote: { marginTop: 12, fontSize: 12, color: "#AAA", fontStyle: "italic" },
-  notLoggedText: { fontSize: 16, color: "#666", marginTop: 15, marginBottom: 20 },
+  addStoryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 20,
+  },
+  addStoryBtnText: { color: "#4169E1", fontWeight: "700", fontSize: 13 },
+  selfNote: {
+    marginTop: 12,
+    fontSize: 12,
+    color: "#AAA",
+    fontStyle: "italic",
+  },
+  notLoggedText: {
+    fontSize: 16,
+    color: "#666",
+    marginTop: 15,
+    marginBottom: 20,
+  },
   loginButton: {
     backgroundColor: "#4169E1",
     paddingHorizontal: 30,
@@ -648,7 +1021,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   loginButtonText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
-  infoSection: { paddingHorizontal: 20, marginTop: 20, gap: 12 },
+  infoSection: { paddingHorizontal: 20, marginTop: 0, gap: 12 },
   infoCard: {
     flexDirection: "row",
     backgroundColor: "#FFF",
@@ -683,6 +1056,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 24,
   },
+  // Modal edição
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -726,9 +1100,20 @@ const styles = StyleSheet.create({
   },
   galleryBtnText: { color: "#FFF", fontWeight: "600", fontSize: 14 },
   presetRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
-  presetImg: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: "#EEE" },
+  presetImg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: "#EEE",
+  },
   presetImgSelected: { borderColor: "#4169E1", borderWidth: 3 },
-  inputLabel: { fontSize: 13, fontWeight: "600", color: "#666", marginBottom: 8 },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 8,
+  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -741,7 +1126,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   textInput: { flex: 1, fontSize: 15, color: "#333" },
-  photoErrorText: { fontSize: 12, color: "#E63946", marginBottom: 10, marginLeft: 4 },
+  photoErrorText: {
+    fontSize: 12,
+    color: "#E63946",
+    marginBottom: 10,
+    marginLeft: 4,
+  },
   removePhotoButton: {
     flexDirection: "row",
     alignItems: "center",

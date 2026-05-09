@@ -9,6 +9,7 @@ import AdBanner from "../components/AdBanner";
 import { AuthProvider } from "../src/context/AuthContext";
 import { ForumProvider } from "../src/context/ForumContext";
 import { NotificationProvider } from "../src/context/NotificationContext";
+import { GalleryProvider } from "../src/context/GalleryContex";
 
 export default function RootLayout() {
   const [introFinished, setIntroFinished] = useState(false);
@@ -27,28 +28,31 @@ export default function RootLayout() {
       <NotificationProvider>
         <AuthProvider>
           <ForumProvider>
-            <View style={styles.container}>
-              <SafeAreaView style={styles.safe}>
-                <StatusBar barStyle="light-content" />
+            <GalleryProvider>
+              <View style={styles.container}>
+                <SafeAreaView style={styles.safe}>
+                  <StatusBar barStyle="light-content" />
 
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                  }}
-                >
-                  <Stack.Screen name="index" />
-                  <Stack.Screen name="login" />
-                  <Stack.Screen name="perfil" />
-                  <Stack.Screen name="rede" options={{ title: "Rede" }} />
-                  <Stack.Screen name="explore" />
-                  <Stack.Screen name="forum" />
-                  <Stack.Screen name="forum-room" />
-                  <Stack.Screen name="acessibilidade" />
-                </Stack>
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                    }}
+                  >
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="login" />
+                    <Stack.Screen name="perfil" />
+                    <Stack.Screen name="rede" options={{ title: "Rede" }} />
+                    <Stack.Screen name="explore" />
+                    <Stack.Screen name="forum" />
+                    <Stack.Screen name="forum-room" />
+                    <Stack.Screen name="acessibilidade" />
+                    <Stack.Screen name="galerias" />
+                  </Stack>
 
-                <AdBanner />
-              </SafeAreaView>
-            </View>
+                  <AdBanner />
+                </SafeAreaView>
+              </View>
+            </GalleryProvider>
           </ForumProvider>
         </AuthProvider>
       </NotificationProvider>

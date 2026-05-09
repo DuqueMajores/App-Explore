@@ -41,8 +41,14 @@ const safeR = (r: any): ArticleReactions => ({
   dislikes: Array.isArray(r?.dislikes) ? r.dislikes : [],
 });
 
-// ── Animated Card Wrapper ──────────────────────────────────────────────────────
-const AnimatedCard = ({ children, index }: { children: React.ReactNode; index: number }) => {
+// ── Animated Card ──────────────────────────────────────────────────────────────
+const AnimatedCard = ({
+  children,
+  index,
+}: {
+  children: React.ReactNode;
+  index: number;
+}) => {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
 
@@ -71,7 +77,7 @@ const AnimatedCard = ({ children, index }: { children: React.ReactNode; index: n
   );
 };
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+// ── Main ───────────────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const [search, setSearch] = useState("");
@@ -79,7 +85,9 @@ export default function HomeScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [loadingArticles, setLoadingArticles] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
-  const [reactions, setReactions] = useState<Record<string, ArticleReactions>>({});
+  const [reactions, setReactions] = useState<Record<string, ArticleReactions>>(
+    {}
+  );
   const menuAnimation = useRef(new Animated.Value(0)).current;
 
   const apiKey = (process.env.EXPO_PUBLIC_NEWS_API_KEY ?? "")
@@ -125,13 +133,18 @@ export default function HomeScreen() {
     if (!search.trim() && articles.length > 0) return;
 
     if (!apiKey) {
-      Alert.alert("Configuração ausente", "Defina EXPO_PUBLIC_NEWS_API_KEY no ambiente.");
+      Alert.alert(
+        "Configuração ausente",
+        "Defina EXPO_PUBLIC_NEWS_API_KEY no ambiente."
+      );
       return;
     }
 
     setLoadingArticles(true);
     const query = search.trim() || "Brasil";
-    const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=pt&sortBy=publishedAt&apiKey=${apiKey}`;
+    const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(
+      query
+    )}&language=pt&sortBy=publishedAt&apiKey=${apiKey}`;
 
     try {
       const response = await fetch(url);
@@ -162,42 +175,45 @@ export default function HomeScreen() {
     }).start();
   };
 
-  const handleReaction = useCallback(async (articleKey: string, type: "like" | "dislike") => {
-    if (!user) return;
+  const handleReaction = useCallback(
+    async (articleKey: string, type: "like" | "dislike") => {
+      if (!user) return;
 
-    const current: ArticleReactions = safeR(reactions[articleKey]);
-    const email = user.email;
+      const current: ArticleReactions = safeR(reactions[articleKey]);
+      const email = user.email;
 
-    let newLikes = [...current.likes];
-    let newDislikes = [...current.dislikes];
+      let newLikes = [...current.likes];
+      let newDislikes = [...current.dislikes];
 
-    if (type === "like") {
-      if (newLikes.includes(email)) {
-        newLikes = newLikes.filter((e) => e !== email);
+      if (type === "like") {
+        if (newLikes.includes(email)) {
+          newLikes = newLikes.filter((e) => e !== email);
+        } else {
+          newLikes.push(email);
+          newDislikes = newDislikes.filter((e) => e !== email);
+        }
       } else {
-        newLikes.push(email);
-        newDislikes = newDislikes.filter((e) => e !== email);
+        if (newDislikes.includes(email)) {
+          newDislikes = newDislikes.filter((e) => e !== email);
+        } else {
+          newDislikes.push(email);
+          newLikes = newLikes.filter((e) => e !== email);
+        }
       }
-    } else {
-      if (newDislikes.includes(email)) {
-        newDislikes = newDislikes.filter((e) => e !== email);
-      } else {
-        newDislikes.push(email);
-        newLikes = newLikes.filter((e) => e !== email);
-      }
-    }
 
-    const updated = {
-      ...reactions,
-      [articleKey]: { likes: newLikes, dislikes: newDislikes },
-    };
-    setReactions(updated);
-    try {
-      await AsyncStorage.setItem(REACTIONS_KEY, JSON.stringify(updated));
-    } catch (e) {
-      console.error("Erro ao salvar reação:", e);
-    }
-  }, [reactions, user]);
+      const updated = {
+        ...reactions,
+        [articleKey]: { likes: newLikes, dislikes: newDislikes },
+      };
+      setReactions(updated);
+      try {
+        await AsyncStorage.setItem(REACTIONS_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.error("Erro ao salvar reação:", e);
+      }
+    },
+    [reactions, user]
+  );
 
   if (loading || !hasInitialized) {
     return (
@@ -255,7 +271,10 @@ export default function HomeScreen() {
       >
         <TouchableOpacity
           style={styles.menuOption}
-          onPress={() => { toggleMenu(); router.push("/perfil"); }}
+          onPress={() => {
+            toggleMenu();
+            router.push("/perfil");
+          }}
         >
           <MaterialIcons name="account-circle" size={22} color="#4169E1" />
           <Text style={styles.menuOptionText}>Meu Perfil</Text>
@@ -263,15 +282,33 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={styles.menuOption}
-          onPress={() => { toggleMenu(); router.push('/rede'); }}
+          onPress={() => {
+            toggleMenu();
+            router.push("/rede");
+          }}
         >
           <MaterialIcons name="groups" size={22} color="#4169E1" />
           <Text style={styles.menuOptionText}>Rede</Text>
         </TouchableOpacity>
 
+        {/* ── NOVO: Galerias ── */}
         <TouchableOpacity
           style={styles.menuOption}
-          onPress={() => { toggleMenu(); router.push("/forum"); }}
+          onPress={() => {
+            toggleMenu();
+            router.push("/galerias");
+          }}
+        >
+          <MaterialIcons name="photo-library" size={22} color="#4169E1" />
+          <Text style={styles.menuOptionText}>Galerias</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuOption}
+          onPress={() => {
+            toggleMenu();
+            router.push("/forum");
+          }}
         >
           <MaterialIcons name="forum" size={22} color="#4169E1" />
           <Text style={styles.menuOptionText}>Forum</Text>
@@ -279,7 +316,10 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={styles.menuOption}
-          onPress={() => { toggleMenu(); router.replace("/"); }}
+          onPress={() => {
+            toggleMenu();
+            router.replace("/");
+          }}
         >
           <MaterialIcons name="home" size={22} color="#4169E1" />
           <Text style={styles.menuOptionText}>Início</Text>
@@ -288,7 +328,12 @@ export default function HomeScreen() {
 
       {/* ── Search ── */}
       <View style={styles.searchContainer}>
-        <MaterialIcons name="search" size={20} color="#999" style={styles.searchIcon} />
+        <MaterialIcons
+          name="search"
+          size={20}
+          color="#999"
+          style={styles.searchIcon}
+        />
         <TextInput
           value={search}
           onChangeText={setSearch}
@@ -323,8 +368,10 @@ export default function HomeScreen() {
           const likedByMe = email ? r.likes.includes(email) : false;
           const dislikedByMe = email ? r.dislikes.includes(email) : false;
 
-          // Detecta se o artigo tem mídia de vídeo
-          const media = detectMedia(item.url ?? undefined, item.urlToImage ?? undefined);
+          const media = detectMedia(
+            item.url ?? undefined,
+            item.urlToImage ?? undefined
+          );
           const isVideo = media.type !== "image";
 
           return (
@@ -339,14 +386,16 @@ export default function HomeScreen() {
                       title: item.title ?? "Sem título",
                       author: item.author ?? "Redação",
                       source: item.source?.name ?? "Fonte",
-                      desc: item.description ?? "Sem descrição disponível.",
-                      image: item.urlToImage ?? "https://via.placeholder.com/400x200",
+                      desc:
+                        item.description ?? "Sem descrição disponível.",
+                      image:
+                        item.urlToImage ??
+                        "https://via.placeholder.com/400x200",
                       url: item.url ?? "",
                     },
                   })
                 }
               >
-                {/* ── Mídia (imagem ou vídeo) ── */}
                 <MediaViewer
                   imageUrl={item.urlToImage ?? undefined}
                   articleUrl={item.url ?? undefined}
@@ -357,10 +406,16 @@ export default function HomeScreen() {
 
                 <View style={styles.cardContent}>
                   <View style={styles.cardSourceRow}>
-                    <Text style={styles.cardSource}>{item.source?.name || "Fonte"}</Text>
+                    <Text style={styles.cardSource}>
+                      {item.source?.name || "Fonte"}
+                    </Text>
                     {isVideo && (
                       <View style={styles.videoChip}>
-                        <MaterialIcons name="videocam" size={11} color="#4169E1" />
+                        <MaterialIcons
+                          name="videocam"
+                          size={11}
+                          color="#4169E1"
+                        />
                         <Text style={styles.videoChipText}>Vídeo</Text>
                       </View>
                     )}
@@ -369,11 +424,12 @@ export default function HomeScreen() {
                     {item.title || "Sem título"}
                   </Text>
 
-                  {/* ── Rodapé do card ── */}
                   <View style={styles.cardFooter}>
                     <Text style={styles.cardDate}>
                       {item.publishedAt
-                        ? new Date(item.publishedAt).toLocaleDateString("pt-BR")
+                        ? new Date(item.publishedAt).toLocaleDateString(
+                            "pt-BR"
+                          )
                         : "Data indisponível"}
                     </Text>
 
@@ -390,7 +446,12 @@ export default function HomeScreen() {
                         />
                       </TouchableOpacity>
                       {r.likes.length > 0 && (
-                        <Text style={[styles.reactionCount, likedByMe && styles.reactionCountLike]}>
+                        <Text
+                          style={[
+                            styles.reactionCount,
+                            likedByMe && styles.reactionCountLike,
+                          ]}
+                        >
                           {r.likes.length}
                         </Text>
                       )}
@@ -409,7 +470,12 @@ export default function HomeScreen() {
                         />
                       </TouchableOpacity>
                       {r.dislikes.length > 0 && (
-                        <Text style={[styles.reactionCount, dislikedByMe && styles.reactionCountDislike]}>
+                        <Text
+                          style={[
+                            styles.reactionCount,
+                            dislikedByMe && styles.reactionCountDislike,
+                          ]}
+                        >
                           {r.dislikes.length}
                         </Text>
                       )}
@@ -428,7 +494,9 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.emptyState}>
               <MaterialIcons name="newspaper" size={60} color="#DDD" />
-              <Text style={styles.emptyStateText}>Nenhuma notícia encontrada</Text>
+              <Text style={styles.emptyStateText}>
+                Nenhuma notícia encontrada
+              </Text>
               <Text style={styles.emptyStateSubtext}>
                 Tente buscar por um termo diferente
               </Text>
@@ -452,11 +520,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F8F9FA",
   },
-  loadingText: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 10,
-  },
+  loadingText: { fontSize: 16, color: "#666", marginTop: 10 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -464,27 +528,15 @@ const styles = StyleSheet.create({
     marginTop: 40,
     marginBottom: 20,
   },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 4 },
   menuButton: {
     width: 40,
     height: 40,
     justifyContent: "center",
     alignItems: "center",
   },
-  headerGreeting: {
-    fontSize: 14,
-    color: "#999",
-    marginBottom: 4,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#212529",
-  },
+  headerGreeting: { fontSize: 14, color: "#999", marginBottom: 4 },
+  headerTitle: { fontSize: 32, fontWeight: "800", color: "#212529" },
   menuOverlay: {
     position: "absolute",
     top: 0,
@@ -525,11 +577,7 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: "center",
   },
-  searchIcon: {
-    position: "absolute",
-    left: 15,
-    zIndex: 1,
-  },
+  searchIcon: { position: "absolute", left: 15, zIndex: 1 },
   input: {
     flex: 1,
     backgroundColor: "#FFF",
@@ -559,11 +607,7 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 15,
   },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: "#CCC",
-    marginTop: 5,
-  },
+  emptyStateSubtext: { fontSize: 14, color: "#CCC", marginTop: 5 },
   card: {
     backgroundColor: "#F8F9FA",
     borderRadius: 20,
@@ -576,21 +620,14 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     overflow: "hidden",
   },
-  cardContent: {
-    padding: 16,
-    backgroundColor: "#FFF",
-  },
+  cardContent: { padding: 16, backgroundColor: "#FFF" },
   cardSourceRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 4,
   },
-  cardSource: {
-    fontSize: 12,
-    color: "#4169E1",
-    fontWeight: "600",
-  },
+  cardSource: { fontSize: 12, color: "#4169E1", fontWeight: "600" },
   videoChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -600,11 +637,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 20,
   },
-  videoChipText: {
-    fontSize: 10,
-    color: "#4169E1",
-    fontWeight: "700",
-  },
+  videoChipText: { fontSize: 10, color: "#4169E1", fontWeight: "700" },
   cardTitle: {
     fontSize: 18,
     fontWeight: "700",
@@ -616,30 +649,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  cardDate: {
-    fontSize: 12,
-    color: "#999",
-  },
-  reactionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  reactionButton: {
-    padding: 2,
-  },
-  reactionCount: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#999",
-  },
-  reactionCountLike: {
-    color: "#E63946",
-  },
-  reactionCountDislike: {
-    color: "#6B7280",
-  },
-  reactionSeparator: {
-    width: 8,
-  },
+  cardDate: { fontSize: 12, color: "#999" },
+  reactionRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  reactionButton: { padding: 2 },
+  reactionCount: { fontSize: 12, fontWeight: "700", color: "#999" },
+  reactionCountLike: { color: "#E63946" },
+  reactionCountDislike: { color: "#6B7280" },
+  reactionSeparator: { width: 8 },
 });
