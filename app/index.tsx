@@ -42,32 +42,35 @@ const safeR = (r: any): ArticleReactions => ({
   dislikes: Array.isArray(r?.dislikes) ? r.dislikes : [],
 });
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-const SkeletonPulse = ({ style }: { style: any }) => {
-  const anim = useRef(new Animated.Value(0.3)).current;
+// ── Animated Card Wrapper ──────────────────────────────────────────────────────
+const AnimatedCard = ({ children, index }: { children: React.ReactNode; index: number }) => {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [anim]);
+    const delay = index * 80;
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 400,
+        delay,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 400,
+        delay,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
-  return <Animated.View style={[style, { opacity: anim }]} />;
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      {children}
+    </Animated.View>
+  );
 };
-
-const SkeletonCard = () => (
-  <View style={styles.card}>
-    <SkeletonPulse style={styles.skeletonImage} />
-    <View style={{ padding: 16, gap: 8 }}>
-      <SkeletonPulse style={styles.skeletonLine} />
-      <SkeletonPulse style={[styles.skeletonLine, { width: "90%" }]} />
-      <SkeletonPulse style={[styles.skeletonLine, { width: "50%", marginTop: 4 }]} />
-    </View>
-  </View>
-);
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function HomeScreen() {
@@ -320,7 +323,7 @@ export default function HomeScreen() {
       <FlatList
         data={articles}
         keyExtractor={(item, index) => `${item.url ?? "article"}-${index}`}
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const key = item.url ?? item.title ?? "";
           const r = safeR(reactions[key]);
           const email = user?.email ?? "";
@@ -328,91 +331,91 @@ export default function HomeScreen() {
           const dislikedByMe = email ? r.dislikes.includes(email) : false;
 
           return (
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.9}
-              onPress={() =>
-                router.push({
-                  pathname: "/explore",
-                  params: {
-                    title: item.title ?? "Sem título",
-                    author: item.author ?? "Redação",
-                    source: item.source?.name ?? "Fonte",
-                    desc: item.description ?? "Sem descrição disponível.",
-                    image: item.urlToImage ?? "https://via.placeholder.com/400x200",
-                    url: item.url ?? "",
-                  },
-                })
-              }
-            >
-              <Image
-                source={{ uri: item.urlToImage || "https://via.placeholder.com/400x200" }}
-                style={styles.cardImage}
-              />
-              <View style={styles.cardContent}>
-                <Text style={styles.cardSource}>{item.source?.name || "Fonte"}</Text>
-                <Text style={styles.cardTitle} numberOfLines={2}>
-                  {item.title || "Sem título"}
-                </Text>
-
-                {/* ── Rodapé do card: data + reações ── */}
-                <View style={styles.cardFooter}>
-                  <Text style={styles.cardDate}>
-                    {item.publishedAt
-                      ? new Date(item.publishedAt).toLocaleDateString("pt-BR")
-                      : "Data indisponível"}
+            <AnimatedCard index={index}>
+              <TouchableOpacity
+                style={styles.card}
+                activeOpacity={0.9}
+                onPress={() =>
+                  router.push({
+                    pathname: "/explore",
+                    params: {
+                      title: item.title ?? "Sem título",
+                      author: item.author ?? "Redação",
+                      source: item.source?.name ?? "Fonte",
+                      desc: item.description ?? "Sem descrição disponível.",
+                      image: item.urlToImage ?? "https://via.placeholder.com/400x200",
+                      url: item.url ?? "",
+                    },
+                  })
+                }
+              >
+                <Image
+                  source={{ uri: item.urlToImage || "https://via.placeholder.com/400x200" }}
+                  style={styles.cardImage}
+                />
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardSource}>{item.source?.name || "Fonte"}</Text>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.title || "Sem título"}
                   </Text>
 
-                  <View style={styles.reactionRow}>
-                    {/* Like */}
-                    <TouchableOpacity
-                      style={styles.reactionButton}
-                      onPress={() => handleReaction(key, "like")}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
-                    >
-                      <MaterialIcons
-                        name={likedByMe ? "favorite" : "favorite-border"}
-                        size={20}
-                        color={likedByMe ? "#E63946" : "#CCC"}
-                      />
-                    </TouchableOpacity>
-                    {r.likes.length > 0 && (
-                      <Text style={[styles.reactionCount, likedByMe && styles.reactionCountLike]}>
-                        {r.likes.length}
-                      </Text>
-                    )}
+                  {/* ── Rodapé do card: data + reações ── */}
+                  <View style={styles.cardFooter}>
+                    <Text style={styles.cardDate}>
+                      {item.publishedAt
+                        ? new Date(item.publishedAt).toLocaleDateString("pt-BR")
+                        : "Data indisponível"}
+                    </Text>
 
-                    <View style={styles.reactionSeparator} />
+                    <View style={styles.reactionRow}>
+                      {/* Like */}
+                      <TouchableOpacity
+                        style={styles.reactionButton}
+                        onPress={() => handleReaction(key, "like")}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+                      >
+                        <MaterialIcons
+                          name={likedByMe ? "favorite" : "favorite-border"}
+                          size={20}
+                          color={likedByMe ? "#E63946" : "#CCC"}
+                        />
+                      </TouchableOpacity>
+                      {r.likes.length > 0 && (
+                        <Text style={[styles.reactionCount, likedByMe && styles.reactionCountLike]}>
+                          {r.likes.length}
+                        </Text>
+                      )}
 
-                    {/* Dislike */}
-                    <TouchableOpacity
-                      style={styles.reactionButton}
-                      onPress={() => handleReaction(key, "dislike")}
-                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-                    >
-                      <MaterialIcons
-                        name="heart-broken"
-                        size={20}
-                        color={dislikedByMe ? "#6B7280" : "#E0E0E0"}
-                      />
-                    </TouchableOpacity>
-                    {r.dislikes.length > 0 && (
-                      <Text style={[styles.reactionCount, dislikedByMe && styles.reactionCountDislike]}>
-                        {r.dislikes.length}
-                      </Text>
-                    )}
+                      <View style={styles.reactionSeparator} />
+
+                      {/* Dislike */}
+                      <TouchableOpacity
+                        style={styles.reactionButton}
+                        onPress={() => handleReaction(key, "dislike")}
+                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+                      >
+                        <MaterialIcons
+                          name="heart-broken"
+                          size={20}
+                          color={dislikedByMe ? "#6B7280" : "#E0E0E0"}
+                        />
+                      </TouchableOpacity>
+                      {r.dislikes.length > 0 && (
+                        <Text style={[styles.reactionCount, dislikedByMe && styles.reactionCountDislike]}>
+                          {r.dislikes.length}
+                        </Text>
+                      )}
+                    </View>
                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </AnimatedCard>
           );
         }}
         ListEmptyComponent={
           loadingArticles ? (
             <View style={styles.emptyState}>
-              {[1, 2, 3].map((i) => (
-                <SkeletonCard key={i} />
-              ))}
+              <ActivityIndicator size="large" color="#4169E1" />
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -609,17 +612,5 @@ const styles = StyleSheet.create({
   },
   reactionSeparator: {
     width: 8,
-  },
-  skeletonImage: {
-    width: "100%",
-    height: 200,
-    backgroundColor: "#E0E0E0",
-    borderRadius: 0,
-  },
-  skeletonLine: {
-    height: 14,
-    backgroundColor: "#E0E0E0",
-    borderRadius: 8,
-    width: "100%",
   },
 });
