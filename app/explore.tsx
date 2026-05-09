@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Linking,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 import { MaterialIcons } from "@expo/vector-icons";
 import { useForum } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
+import MediaViewer from "../components/MediaViewer";
 
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? "";
 const GROQ_MODEL = "llama-3.1-8b-instant";
@@ -29,7 +29,6 @@ async function callGroq(content: string, jsonMode = false): Promise<string> {
     messages: [{ role: "user", content }],
   };
 
-  // Ativa o modo JSON nativo do Groq quando pedido
   if (jsonMode) {
     body.response_format = { type: "json_object" };
   }
@@ -50,14 +49,11 @@ async function callGroq(content: string, jsonMode = false): Promise<string> {
   return data.choices?.[0]?.message?.content ?? "";
 }
 
-// Extrai o primeiro objeto JSON encontrado na string, mesmo com texto ao redor
 function extractJson(text: string): { favor: string; contra: string } {
-  // 1. Tenta parsear direto
   try {
     return JSON.parse(text.trim());
   } catch {}
 
-  // 2. Remove blocos de markdown ```json ... ```
   const stripped = text.replace(/```json[\s\S]*?```|```[\s\S]*?```/g, (match) =>
     match.replace(/```json|```/g, "")
   );
@@ -65,7 +61,6 @@ function extractJson(text: string): { favor: string; contra: string } {
     return JSON.parse(stripped.trim());
   } catch {}
 
-  // 3. Extrai o primeiro { ... } encontrado na resposta
   const match = text.match(/\{[\s\S]*\}/);
   if (match) {
     try {
@@ -160,7 +155,14 @@ export default function ExploreScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Image source={{ uri: imageUrl }} style={styles.mainImage} />
+      {/* ── Hero: imagem ou vídeo ── */}
+      <MediaViewer
+        imageUrl={imageUrl}
+        articleUrl={articleUrl}
+        height={300}
+        showBadge={true}
+        autoPlay={false}
+      />
 
       <View style={styles.content}>
         <Text style={styles.sourceBadge}>{source || "Fonte"}</Text>
@@ -296,7 +298,6 @@ export default function ExploreScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFF" },
-  mainImage: { width: "100%", height: 300 },
   content: {
     padding: 24,
     marginTop: -30,

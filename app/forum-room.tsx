@@ -17,6 +17,7 @@ import { useLocalSearchParams, router, useRouter } from "expo-router";
 import { useForum, ForumComment } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
 import { useNotification } from "../src/context/NotificationContext";
+import MediaViewer from "../components/MediaViewer";
 
 const PAGE_SIZE = 10;
 const TOP_COUNT = 3;
@@ -35,13 +36,16 @@ function ArticleHeader({
 }) {
   return (
     <View style={articleStyles.container}>
-      {!!image && (
-        <Image
-          source={{ uri: image }}
-          style={articleStyles.image}
-          resizeMode="cover"
-        />
-      )}
+      {/* Usa MediaViewer: detecta automaticamente YouTube, vídeo direto ou imagem */}
+      <MediaViewer
+        imageUrl={image}
+        articleUrl={url}
+        height={200}
+        showBadge={true}
+        autoPlay={false}
+        style={articleStyles.mediaContainer}
+      />
+
       <View style={articleStyles.body}>
         <Text style={articleStyles.title} numberOfLines={3}>
           {title}
@@ -152,7 +156,6 @@ function CommentCard({
         {comment.text}
       </Text>
 
-      {/* Actions — responder + coração juntos, alinhados à direita */}
       <View style={styles.commentActions}>
         {!isRoot && (
           <TouchableOpacity
@@ -631,12 +634,10 @@ export default function ForumRoomScreen() {
 
 const articleStyles = StyleSheet.create({
   container: { marginBottom: 16 },
-  image: {
-    width: "100%",
-    height: 200,
+  mediaContainer: {
     borderRadius: 16,
+    overflow: "hidden",
     marginBottom: 14,
-    backgroundColor: "#EEE",
   },
   body: { paddingHorizontal: 2 },
   title: {
@@ -791,7 +792,6 @@ const styles = StyleSheet.create({
   commentDate: { fontSize: 12, color: "#999", marginTop: 1 },
   commentText: { fontSize: 15, lineHeight: 22, color: "#444" },
   commentTextRoot: { fontSize: 16, lineHeight: 24, color: "#212529" },
-  /* actions: responder + coração juntos, empurrados para a direita */
   commentActions: {
     flexDirection: "row",
     alignItems: "center",

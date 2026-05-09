@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../src/context/AuthContext";
+import MediaViewer, { detectMedia } from "../components/MediaViewer";
 
 type Article = {
   author?: string | null;
@@ -28,7 +29,6 @@ type Article = {
   urlToImage?: string | null;
 };
 
-// Estrutura de reações: cada artigo guarda arrays de emails
 type ArticleReactions = {
   likes: string[];
   dislikes: string[];
@@ -36,7 +36,6 @@ type ArticleReactions = {
 
 const REACTIONS_KEY = "@App:articleReactions";
 
-// Garante arrays válidos mesmo que o storage tenha dados antigos com campos undefined
 const safeR = (r: any): ArticleReactions => ({
   likes: Array.isArray(r?.likes) ? r.likes : [],
   dislikes: Array.isArray(r?.dislikes) ? r.dislikes : [],
@@ -87,7 +86,6 @@ export default function HomeScreen() {
     .replace(/[";]/g, "")
     .trim();
 
-  // ── Carrega reações persistidas ao montar ──
   useEffect(() => {
     AsyncStorage.getItem(REACTIONS_KEY)
       .then((stored) => {
@@ -164,7 +162,6 @@ export default function HomeScreen() {
     }).start();
   };
 
-  // ── Reação com contagem por usuário e persistência ──
   const handleReaction = useCallback(async (articleKey: string, type: "like" | "dislike") => {
     if (!user) return;
 
@@ -176,19 +173,15 @@ export default function HomeScreen() {
 
     if (type === "like") {
       if (newLikes.includes(email)) {
-        // remove like
         newLikes = newLikes.filter((e) => e !== email);
       } else {
-        // adiciona like e remove dislike se existir
         newLikes.push(email);
         newDislikes = newDislikes.filter((e) => e !== email);
       }
     } else {
       if (newDislikes.includes(email)) {
-        // remove dislike
         newDislikes = newDislikes.filter((e) => e !== email);
       } else {
-        // adiciona dislike e remove like se existir
         newDislikes.push(email);
         newLikes = newLikes.filter((e) => e !== email);
       }
@@ -330,6 +323,10 @@ export default function HomeScreen() {
           const likedByMe = email ? r.likes.includes(email) : false;
           const dislikedByMe = email ? r.dislikes.includes(email) : false;
 
+          // Detecta se o artigo tem mídia de vídeo
+          const media = detectMedia(item.url ?? undefined, item.urlToImage ?? undefined);
+          const isVideo = media.type !== "image";
+
           return (
             <AnimatedCard index={index}>
               <TouchableOpacity
@@ -349,17 +346,30 @@ export default function HomeScreen() {
                   })
                 }
               >
-                <Image
-                  source={{ uri: item.urlToImage || "https://via.placeholder.com/400x200" }}
-                  style={styles.cardImage}
+                {/* ── Mídia (imagem ou vídeo) ── */}
+                <MediaViewer
+                  imageUrl={item.urlToImage ?? undefined}
+                  articleUrl={item.url ?? undefined}
+                  height={200}
+                  showBadge={isVideo}
+                  style={styles.cardMediaContainer}
                 />
+
                 <View style={styles.cardContent}>
-                  <Text style={styles.cardSource}>{item.source?.name || "Fonte"}</Text>
+                  <View style={styles.cardSourceRow}>
+                    <Text style={styles.cardSource}>{item.source?.name || "Fonte"}</Text>
+                    {isVideo && (
+                      <View style={styles.videoChip}>
+                        <MaterialIcons name="videocam" size={11} color="#4169E1" />
+                        <Text style={styles.videoChipText}>Vídeo</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.cardTitle} numberOfLines={2}>
                     {item.title || "Sem título"}
                   </Text>
 
-                  {/* ── Rodapé do card: data + reações ── */}
+                  {/* ── Rodapé do card ── */}
                   <View style={styles.cardFooter}>
                     <Text style={styles.cardDate}>
                       {item.publishedAt
@@ -368,7 +378,6 @@ export default function HomeScreen() {
                     </Text>
 
                     <View style={styles.reactionRow}>
-                      {/* Like */}
                       <TouchableOpacity
                         style={styles.reactionButton}
                         onPress={() => handleReaction(key, "like")}
@@ -388,7 +397,6 @@ export default function HomeScreen() {
 
                       <View style={styles.reactionSeparator} />
 
-                      {/* Dislike */}
                       <TouchableOpacity
                         style={styles.reactionButton}
                         onPress={() => handleReaction(key, "dislike")}
@@ -557,24 +565,45 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: "#F8F9FA",
     borderRadius: 20,
     marginBottom: 20,
     overflow: "hidden",
     elevation: 3,
   },
-  cardImage: {
-    width: "100%",
-    height: 200,
+  cardMediaContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: "hidden",
   },
   cardContent: {
     padding: 16,
+    backgroundColor: "#FFF",
+  },
+  cardSourceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
   },
   cardSource: {
     fontSize: 12,
     color: "#4169E1",
     fontWeight: "600",
-    marginBottom: 4,
+  },
+  videoChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#EEF2FF",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  videoChipText: {
+    fontSize: 10,
+    color: "#4169E1",
+    fontWeight: "700",
   },
   cardTitle: {
     fontSize: 18,
