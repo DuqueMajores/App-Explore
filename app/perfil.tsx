@@ -26,9 +26,9 @@ const GALLERY_COL = 3;
 const GALLERY_SIZE = (width - 40 - 20 - (GALLERY_COL - 1) * 4) / GALLERY_COL;
 
 const PRESET_AVATARS = [
-  "https://imagetourl.cloud/usr5cr0j.png",
-  "https://imagetourl.cloud/h62kr4bl.png",
-  "https://imagetourl.cloud/h5m0esya.png",
+  "https://api.dicebear.com/9.x/adventurer/png?seed=Felix&backgroundColor=b6e3f4",
+  "https://api.dicebear.com/9.x/adventurer/png?seed=Lily&backgroundColor=ffd5dc",
+  "https://api.dicebear.com/9.x/adventurer/png?seed=Max&backgroundColor=c0aede",
 ];
 
 interface PublicUser {
