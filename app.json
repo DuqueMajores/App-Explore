@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Explore",
-    "slug": "Explore",
+    "slug": "explore",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/jornal.png",
@@ -49,8 +49,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ec3a28ef-9efb-43e7-a597-511d32d04dc1"
+        "projectId": "e0619fcc-5fbc-4659-b089-dc738e0519e8"
       }
-    }
+    },
+    "owner": "moisesdamasceno"
   }
 }
