@@ -34,6 +34,12 @@
         "projectId": "6712c15e-dfbf-40e2-a561-bfb8108663ec"
       }
     },
-    "owner": "moisesdamasceno"
+    "owner": "moisesdamasceno",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6712c15e-dfbf-40e2-a561-bfb8108663ec"
+    }
   }
 }
