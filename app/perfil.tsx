@@ -25,11 +25,7 @@ const { width } = Dimensions.get("window");
 const GALLERY_COL = 3;
 const GALLERY_SIZE = (width - 40 - 20 - (GALLERY_COL - 1) * 4) / GALLERY_COL;
 
-const PRESET_AVATARS = [
-  "https://api.dicebear.com/9.x/adventurer/png?seed=Felix&backgroundColor=b6e3f4",
-  "https://api.dicebear.com/9.x/adventurer/png?seed=Lily&backgroundColor=ffd5dc",
-  "https://api.dicebear.com/9.x/adventurer/png?seed=Max&backgroundColor=c0aede",
-];
+
 
 interface PublicUser {
   name: string;
@@ -778,29 +774,6 @@ export default function ProfileScreen() {
                   Escolher da Galeria
                 </Text>
               </TouchableOpacity>
-
-              <Text style={styles.inputLabel}>
-                Ou escolha um personagem:
-              </Text>
-              <View style={styles.presetRow}>
-                {PRESET_AVATARS.map((url) => (
-                  <TouchableOpacity
-                    key={url}
-                    onPress={() => {
-                      setEditPhotoUrl(url);
-                      setPhotoPreviewError(false);
-                    }}
-                  >
-                    <Image
-                      source={{ uri: url }}
-                      style={[
-                        styles.presetImg,
-                        editPhotoUrl === url && styles.presetImgSelected,
-                      ]}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
 
               {/* Nome */}
               <Text style={styles.inputLabel}>Nome</Text>

@@ -88,11 +88,35 @@ export default function GaleriasScreen() {
 
       {isEmpty ? (
         <View style={styles.emptyState}>
-          <MaterialIcons name="photo-library" size={70} color="#DDD" />
-          <Text style={styles.emptyText}>Nenhuma foto publicada</Text>
+          <View style={styles.emptyIconWrap}>
+            <MaterialIcons name="photo-library" size={56} color="#4169E1" />
+          </View>
+          <Text style={styles.emptyText}>Nenhuma foto publicada ainda</Text>
           <Text style={styles.emptySubtext}>
-            As fotos ficam visíveis por 24 horas.{"\n"}Publique no seu perfil!
+            As fotos ficam visíveis por 24 horas para todos os usuários.
           </Text>
+          <View style={styles.emptySteps}>
+            {[
+              { icon: "account-circle" as const, label: "Acesse seu Perfil" },
+              { icon: "add-photo-alternate" as const, label: 'Toque em "Publicar foto no story"' },
+              { icon: "public" as const, label: "Sua foto aparece aqui!" },
+            ].map((step, i) => (
+              <View key={i} style={styles.emptyStep}>
+                <View style={styles.emptyStepIcon}>
+                  <MaterialIcons name={step.icon} size={22} color="#4169E1" />
+                </View>
+                <Text style={styles.emptyStepText}>{step.label}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => router.push("/perfil")}
+            activeOpacity={0.85}
+          >
+            <MaterialIcons name="add-photo-alternate" size={20} color="#FFF" />
+            <Text style={styles.emptyBtnText}>Publicar minha primeira foto</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -272,7 +296,11 @@ export default function GaleriasScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8F9FA" },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#F8F9FA",
+    maxHeight: 590, 
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -343,20 +371,74 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 40,
+    paddingHorizontal: 32,
+    paddingTop: 60,
+  },
+  emptyIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "#EEF2FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#999",
-    marginTop: 20,
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#212529",
+    textAlign: "center",
+    marginBottom: 10,
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#BBB",
+    color: "#999",
     textAlign: "center",
-    marginTop: 10,
     lineHeight: 22,
+    marginBottom: 32,
+  },
+  emptySteps: {
+    width: "100%",
+    gap: 12,
+    marginBottom: 32,
+  },
+  emptyStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 14,
+    padding: 14,
+    gap: 14,
+    elevation: 2,
+  },
+  emptyStepIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#EEF2FF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyStepText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    flex: 1,
+  },
+  emptyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#4169E1",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 16,
+    elevation: 3,
+  },
+  emptyBtnText: {
+    color: "#FFF",
+    fontSize: 15,
+    fontWeight: "700",
   },
 
   // Modal

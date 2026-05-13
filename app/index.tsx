@@ -90,10 +90,6 @@ export default function HomeScreen() {
   );
   const menuAnimation = useRef(new Animated.Value(0)).current;
 
-  const apiKey = (process.env.EXPO_PUBLIC_NEWS_API_KEY ?? "")
-    .replace(/[";]/g, "")
-    .trim();
-
   useEffect(() => {
     AsyncStorage.getItem(REACTIONS_KEY)
       .then((stored) => {
@@ -132,7 +128,11 @@ export default function HomeScreen() {
   const buscarNoticias = useCallback(async () => {
     if (!search.trim() && articles.length > 0) return;
 
-    if (!apiKey) {
+    const resolvedKey = (process.env.EXPO_PUBLIC_NEWS_API_KEY ?? "")
+      .replace(/["\s;]/g, "")
+      .trim();
+
+    if (!resolvedKey) {
       Alert.alert(
         "Configuração ausente",
         "Defina EXPO_PUBLIC_NEWS_API_KEY no ambiente."
@@ -144,7 +144,7 @@ export default function HomeScreen() {
     const query = search.trim() || "Brasil";
     const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(
       query
-    )}&language=pt&sortBy=publishedAt&apiKey=${apiKey}`;
+    )}&language=pt&sortBy=publishedAt&apiKey=${resolvedKey}`;
 
     try {
       const response = await fetch(url);
@@ -156,7 +156,7 @@ export default function HomeScreen() {
     } finally {
       setLoadingArticles(false);
     }
-  }, [apiKey, articles.length, search]);
+  }, [articles.length, search]);
 
   useEffect(() => {
     if (user && articles.length === 0) {
@@ -296,7 +296,7 @@ export default function HomeScreen() {
           style={styles.menuOption}
           onPress={() => {
             toggleMenu();
-            router.push("/galerias");
+            router.push("/galeria");
           }}
         >
           <MaterialIcons name="photo-library" size={22} color="#4169E1" />
