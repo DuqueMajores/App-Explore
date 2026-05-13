@@ -6,7 +6,6 @@ import {
   Alert,
   Animated,
   FlatList,
-  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -42,20 +41,19 @@ const safeR = (r: any): ArticleReactions => ({
   dislikes: Array.isArray(r?.dislikes) ? r.dislikes : [],
 });
 
-// ── Categorias de filtro ───────────────────────────────────────────────────────
+// ── Categorias (Apenas texto agora) ──────────────────────────────────────────
 const CATEGORIES = [
-  { label: "Brasil", query: "Brasil", icon: "" },
-  { label: "Tecnologia", query: "tecnologia", icon: "" },
-  { label: "Economia", query: "economia", icon: "" },
-  { label: "Esportes", query: "esportes", icon: "" },
-  { label: "Saúde", query: "saúde", icon: "" },
-  { label: "Política", query: "política", icon: "" },
-  { label: "Ciência", query: "ciência", icon: "" },
-  { label: "Entretenimento", query: "entretenimento", icon: "" },
-  { label: "Mundo", query: "mundo", icon: "🌍" },
+  { label: "Brasil", query: "Brasil" },
+  { label: "Tecnologia", query: "tecnologia" },
+  { label: "Economia", query: "economia" },
+  { label: "Esportes", query: "esportes" },
+  { label: "Saúde", query: "saúde" },
+  { label: "Política", query: "política" },
+  { label: "Ciência", query: "ciência" },
+  { label: "Entretenimento", query: "entretenimento" },
+  { label: "Mundo", query: "mundo" },
 ];
 
-// ── Animated Card ──────────────────────────────────────────────────────────────
 const AnimatedCard = ({
   children,
   index,
@@ -91,7 +89,6 @@ const AnimatedCard = ({
   );
 };
 
-// ── Main ───────────────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const [search, setSearch] = useState("");
@@ -117,7 +114,7 @@ export default function HomeScreen() {
           setReactions(migrated);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useFocusEffect(
@@ -150,10 +147,7 @@ export default function HomeScreen() {
         .trim();
 
       if (!resolvedKey) {
-        Alert.alert(
-          "Configuração ausente",
-          "Defina EXPO_PUBLIC_NEWS_API_KEY no ambiente."
-        );
+        Alert.alert("Erro", "API Key não configurada.");
         return;
       }
 
@@ -168,8 +162,7 @@ export default function HomeScreen() {
         const data = await response.json();
         setArticles(Array.isArray(data.articles) ? data.articles : []);
       } catch (error) {
-        console.error("Erro ao buscar notícias:", error);
-        Alert.alert("Erro", "Erro ao buscar notícias. Verifique sua conexão.");
+        Alert.alert("Erro", "Erro ao buscar notícias.");
       } finally {
         setLoadingArticles(false);
       }
@@ -185,7 +178,6 @@ export default function HomeScreen() {
 
   const handleCategoryPress = (cat: { label: string; query: string }) => {
     if (activeCategory === cat.label) {
-      // Deselect
       setActiveCategory(null);
       setSearch("");
       buscarNoticias("Brasil");
@@ -208,7 +200,7 @@ export default function HomeScreen() {
     Animated.spring(menuAnimation, {
       toValue,
       useNativeDriver: true,
-      friction: 5,
+      friction: 7,
       tension: 40,
     }).start();
   };
@@ -216,10 +208,8 @@ export default function HomeScreen() {
   const handleReaction = useCallback(
     async (articleKey: string, type: "like" | "dislike") => {
       if (!user) return;
-
       const current: ArticleReactions = safeR(reactions[articleKey]);
       const email = user.email;
-
       let newLikes = [...current.likes];
       let newDislikes = [...current.dislikes];
 
@@ -239,36 +229,19 @@ export default function HomeScreen() {
         }
       }
 
-      const updated = {
-        ...reactions,
-        [articleKey]: { likes: newLikes, dislikes: newDislikes },
-      };
+      const updated = { ...reactions, [articleKey]: { likes: newLikes, dislikes: newDislikes } };
       setReactions(updated);
       try {
         await AsyncStorage.setItem(REACTIONS_KEY, JSON.stringify(updated));
-      } catch (e) {
-        console.error("Erro ao salvar reação:", e);
-      }
+      } catch (e) { }
     },
     [reactions, user]
   );
 
-  if (loading || !hasInitialized) {
+  if (loading || !hasInitialized || !user) {
     return (
       <View style={styles.loadingContainer}>
-        <StatusBar barStyle="dark-content" />
         <ActivityIndicator size="large" color="#4169E1" />
-        <Text style={styles.loadingText}>Carregando...</Text>
-      </View>
-    );
-  }
-
-  if (!user) {
-    return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="dark-content" />
-        <ActivityIndicator size="large" color="#4169E1" />
-        <Text style={styles.loadingText}>Redirecionando...</Text>
       </View>
     );
   }
@@ -279,289 +252,117 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerGreeting}>Olá, {firstName}!</Text>
           <Text style={styles.headerTitle}>Explore</Text>
         </View>
-
-        <View style={styles.headerRight}>
-          <TouchableOpacity onPress={toggleMenu} style={styles.menuButton}>
-            <MaterialIcons
-              name={menuOpen ? "close" : "menu"}
-              size={28}
-              color="#4169E1"
-            />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={toggleMenu} style={styles.menuButton}>
+          <MaterialIcons name={menuOpen ? "close" : "menu"} size={28} color="#4169E1" />
+        </TouchableOpacity>
       </View>
 
+      {/* Menu Overlay */}
       {menuOpen && (
         <TouchableWithoutFeedback onPress={toggleMenu}>
           <View style={styles.menuOverlay} />
         </TouchableWithoutFeedback>
       )}
 
+      {/* Menu Suspenso */}
       <Animated.View
         pointerEvents={menuOpen ? "auto" : "none"}
         style={[styles.expandedMenu, { opacity: menuAnimation }]}
       >
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => {
-            toggleMenu();
-            router.push("/perfil");
-          }}
-        >
-          <MaterialIcons name="account-circle" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Meu Perfil</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => {
-            toggleMenu();
-            router.push("/rede");
-          }}
-        >
-          <MaterialIcons name="groups" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Rede</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => {
-            toggleMenu();
-            router.push("/galeria");
-          }}
-        >
-          <MaterialIcons name="photo-library" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Galerias</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => {
-            toggleMenu();
-            router.push("/forum");
-          }}
-        >
-          <MaterialIcons name="forum" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Forum</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => {
-            toggleMenu();
-            router.replace("/");
-          }}
-        >
-          <MaterialIcons name="home" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Início</Text>
-        </TouchableOpacity>
+        {["Perfil", "Rede", "Galeria", "Forum", "Início"].map((item, idx) => (
+          <TouchableOpacity
+            key={idx}
+            style={styles.menuOption}
+            onPress={() => { toggleMenu(); router.push(item === "Início" ? "/" : `/${item.toLowerCase()}`); }}
+          >
+            <Text style={styles.menuOptionText}>{item}</Text>
+          </TouchableOpacity>
+        ))}
       </Animated.View>
 
-      {/* ── Search ── */}
+      {/* Busca */}
       <View style={styles.searchContainer}>
-        <MaterialIcons
-          name="search"
-          size={20}
-          color="#999"
-          style={styles.searchIcon}
-        />
+        <MaterialIcons name="search" size={20} color="#999" style={styles.searchIcon} />
         <TextInput
           value={search}
-          onChangeText={(text) => {
-            setSearch(text);
-            if (text === "") setActiveCategory(null);
-          }}
+          onChangeText={(text) => { setSearch(text); if (text === "") setActiveCategory(null); }}
           placeholder="Pesquisar notícias..."
           style={styles.input}
           placeholderTextColor="#CCC"
-          editable={!loadingArticles}
-          returnKeyType="search"
           onSubmitEditing={() => buscarNoticias()}
         />
         {search.length > 0 && (
-          <TouchableOpacity
-            onPress={handleClearSearch}
-            style={styles.clearButton}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            disabled={loadingArticles}
-          >
+          <TouchableOpacity onPress={handleClearSearch} style={styles.clearButton}>
             <MaterialIcons name="close" size={18} color="#999" />
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={styles.searchButton}
-          onPress={() => buscarNoticias()}
-          disabled={loadingArticles}
-        >
-          {loadingArticles ? (
-            <ActivityIndicator color="#FFF" size="small" />
-          ) : (
-            <MaterialIcons name="arrow-forward" size={20} color="#FFF" />
-          )}
+        <TouchableOpacity style={styles.searchButton} onPress={() => buscarNoticias()}>
+          <MaterialIcons name="arrow-forward" size={20} color="#FFF" />
         </TouchableOpacity>
       </View>
 
-      {/* ── Categorias ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesRow}
-        contentContainerStyle={styles.categoriesContent}
-      >
-        {CATEGORIES.map((cat) => {
-          const isActive = activeCategory === cat.label;
-          return (
-            <TouchableOpacity
-              key={cat.label}
-              style={[
-                styles.categoryChip,
-                isActive && styles.categoryChipActive,
-              ]}
-              onPress={() => handleCategoryPress(cat)}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.categoryChipIcon}>{cat.icon}</Text>
-              <Text
-                style={[
-                  styles.categoryChipText,
-                  isActive && styles.categoryChipTextActive,
-                ]}
+      {/* Categorias (Sem ícones) */}
+      <View style={styles.categoriesWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesContent}
+        >
+          {CATEGORIES.map((cat) => {
+            const isActive = activeCategory === cat.label;
+            return (
+              <TouchableOpacity
+                key={cat.label}
+                style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                onPress={() => handleCategoryPress(cat)}
               >
-                {cat.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+                <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-      {/* ── Lista de artigos ── */}
+      {/* Lista de Artigos */}
       <FlatList
         data={articles}
-        keyExtractor={(item, index) => `${item.url ?? "article"}-${index}`}
+        keyExtractor={(item, index) => `${item.url ?? index}`}
         renderItem={({ item, index }) => {
           const key = item.url ?? item.title ?? "";
           const r = safeR(reactions[key]);
           const email = user?.email ?? "";
-          const likedByMe = email ? r.likes.includes(email) : false;
-          const dislikedByMe = email ? r.dislikes.includes(email) : false;
-
-          const media = detectMedia(
-            item.url ?? undefined,
-            item.urlToImage ?? undefined
-          );
-          const isVideo = media.type !== "image";
+          const likedByMe = r.likes.includes(email);
+          const dislikedByMe = r.dislikes.includes(email);
+          const media = detectMedia(item.url ?? undefined, item.urlToImage ?? undefined);
 
           return (
             <AnimatedCard index={index}>
               <TouchableOpacity
                 style={styles.card}
-                activeOpacity={0.9}
-                onPress={() =>
-                  router.push({
-                    pathname: "/explore",
-                    params: {
-                      title: item.title ?? "Sem título",
-                      author: item.author ?? "Redação",
-                      source: item.source?.name ?? "Fonte",
-                      desc:
-                        item.description ?? "Sem descrição disponível.",
-                      image:
-                        item.urlToImage ??
-                        "https://via.placeholder.com/400x200",
-                      url: item.url ?? "",
-                    },
-                  })
-                }
+                onPress={() => router.push({ pathname: "/explore", params: { ...item, source: item.source?.name } })}
               >
-                <MediaViewer
-                  imageUrl={item.urlToImage ?? undefined}
-                  articleUrl={item.url ?? undefined}
-                  height={200}
-                  showBadge={isVideo}
-                  style={styles.cardMediaContainer}
-                />
-
+                <MediaViewer imageUrl={item.urlToImage ?? undefined} articleUrl={item.url ?? undefined} height={200} />
                 <View style={styles.cardContent}>
-                  <View style={styles.cardSourceRow}>
-                    <Text style={styles.cardSource}>
-                      {item.source?.name || "Fonte"}
-                    </Text>
-                    {isVideo && (
-                      <View style={styles.videoChip}>
-                        <MaterialIcons
-                          name="videocam"
-                          size={11}
-                          color="#4169E1"
-                        />
-                        <Text style={styles.videoChipText}>Vídeo</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.cardTitle} numberOfLines={2}>
-                    {item.title || "Sem título"}
-                  </Text>
-
+                  <Text style={styles.cardSource}>{item.source?.name || "Fonte"}</Text>
+                  <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
                   <View style={styles.cardFooter}>
-                    <Text style={styles.cardDate}>
-                      {item.publishedAt
-                        ? new Date(item.publishedAt).toLocaleDateString(
-                            "pt-BR"
-                          )
-                        : "Data indisponível"}
-                    </Text>
-
+                    <Text style={styles.cardDate}>{item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("pt-BR") : ""}</Text>
                     <View style={styles.reactionRow}>
-                      <TouchableOpacity
-                        style={styles.reactionButton}
-                        onPress={() => handleReaction(key, "like")}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
-                      >
-                        <MaterialIcons
-                          name={likedByMe ? "favorite" : "favorite-border"}
-                          size={20}
-                          color={likedByMe ? "#E63946" : "#CCC"}
-                        />
+                      <TouchableOpacity onPress={() => handleReaction(key, "like")}>
+                        <MaterialIcons name={likedByMe ? "favorite" : "favorite-border"} size={20} color={likedByMe ? "#E63946" : "#CCC"} />
                       </TouchableOpacity>
-                      {r.likes.length > 0 && (
-                        <Text
-                          style={[
-                            styles.reactionCount,
-                            likedByMe && styles.reactionCountLike,
-                          ]}
-                        >
-                          {r.likes.length}
-                        </Text>
-                      )}
-
-                      <View style={styles.reactionSeparator} />
-
-                      <TouchableOpacity
-                        style={styles.reactionButton}
-                        onPress={() => handleReaction(key, "dislike")}
-                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-                      >
-                        <MaterialIcons
-                          name="heart-broken"
-                          size={20}
-                          color={dislikedByMe ? "#6B7280" : "#E0E0E0"}
-                        />
+                      <Text style={styles.reactionCount}>{r.likes.length || ""}</Text>
+                      <TouchableOpacity onPress={() => handleReaction(key, "dislike")} style={{ marginLeft: 10 }}>
+                        <MaterialIcons name="heart-broken" size={20} color={dislikedByMe ? "#6B7280" : "#E0E0E0"} />
                       </TouchableOpacity>
-                      {r.dislikes.length > 0 && (
-                        <Text
-                          style={[
-                            styles.reactionCount,
-                            dislikedByMe && styles.reactionCountDislike,
-                          ]}
-                        >
-                          {r.dislikes.length}
-                        </Text>
-                      )}
                     </View>
                   </View>
                 </View>
@@ -569,223 +370,63 @@ export default function HomeScreen() {
             </AnimatedCard>
           );
         }}
-        ListEmptyComponent={
-          loadingArticles ? (
-            <View style={styles.emptyState}>
-              <ActivityIndicator size="large" color="#4169E1" />
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <MaterialIcons name="newspaper" size={60} color="#DDD" />
-              <Text style={styles.emptyStateText}>
-                Nenhuma notícia encontrada
-              </Text>
-              <Text style={styles.emptyStateSubtext}>
-                Tente buscar por um termo diferente
-              </Text>
-            </View>
-          )
-        }
+        ListEmptyComponent={loadingArticles ? <ActivityIndicator size="large" color="#4169E1" style={{ marginTop: 50 }} /> : null}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8F9FA",
-    paddingHorizontal: 20,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F8F9FA",
-  },
-  loadingText: { fontSize: 16, color: "#666", marginTop: 10 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 40,
-    marginBottom: 20,
-  },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 4 },
-  menuButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerGreeting: { fontSize: 14, color: "#999", marginBottom: 4 },
+  container: { flex: 1, backgroundColor: "#F8F9FA", paddingHorizontal: 20 },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 50, marginBottom: 20 },
+  headerGreeting: { fontSize: 14, color: "#999" },
   headerTitle: { fontSize: 32, fontWeight: "800", color: "#212529" },
-  menuOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 10,
-  },
-  expandedMenu: {
-    position: "absolute",
-    top: 110,
-    right: 20,
-    backgroundColor: "#FFF",
-    borderRadius: 15,
-    padding: 10,
-    zIndex: 11,
-    width: 200,
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: "#F0F0F0",
-  },
-  menuOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
-  menuOptionText: {
-    marginLeft: 12,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  // ── Search ──
-  searchContainer: {
-    flexDirection: "row",
-    marginBottom: 12,
-    gap: 10,
-    alignItems: "center",
-  },
+  menuButton: { padding: 5 },
+  menuOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 },
+  expandedMenu: { position: "absolute", top: 100, right: 20, backgroundColor: "#FFF", borderRadius: 15, padding: 10, zIndex: 11, width: 180, elevation: 5 },
+  menuOption: { padding: 15, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
+  menuOptionText: { fontSize: 16, fontWeight: "600", color: "#333" },
+  searchContainer: { flexDirection: "row", alignItems: "center", marginBottom: 15 },
   searchIcon: { position: "absolute", left: 15, zIndex: 1 },
-  input: {
-    flex: 1,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    paddingLeft: 42,
-    paddingRight: 36,
-    paddingVertical: 12,
-    elevation: 2,
-    fontSize: 16,
-    color: "#333",
+  input: { flex: 1, backgroundColor: "#FFF", borderRadius: 12, paddingLeft: 45, paddingRight: 40, height: 50, elevation: 2 },
+  clearButton: { position: "absolute", right: 65 },
+  searchButton: { backgroundColor: "#4169E1", width: 50, height: 50, borderRadius: 12, justifyContent: "center", alignItems: "center", marginLeft: 10 },
+
+  // Ajuste das Categorias
+  
+  categoriesWrapper: { 
+    height: 55, 
+    marginBottom: 10, 
   },
-  clearButton: {
-    position: "absolute",
-    right: 62,
-    zIndex: 2,
-    padding: 4,
-  },
-  searchButton: {
-    backgroundColor: "#4169E1",
-    padding: 12,
-    borderRadius: 12,
-    justifyContent: "center",
+  categoriesContent: { 
     alignItems: "center",
-  },
-  // ── Categorias ──
-  categoriesRow: {
-    marginBottom: 16,
-    flexGrow: 0,
-    padding: 15,
-  },
-  categoriesContent: {
-    paddingRight: 4,
-    gap: 8,
-    flexDirection: "row",
-    alignItems: "center",
+    paddingRight: 20, 
+    paddingHorizontal: 20,
+    paddingVertical: 10,
   },
   categoryChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 15,
-    borderRadius: 20,
     backgroundColor: "#FFF",
-    borderWidth: 1.5,
-    borderColor: "#E8E8E8",
-    elevation: 1,
-  },
-  categoryChipActive: {
-    backgroundColor: "#4169E1",
-    borderColor: "#4169E1",
-    elevation: 3,
-  },
-  categoryChipIcon: {
-    fontSize: 14,
-  },
-  categoryChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#555",
-  },
-  categoryChipTextActive: {
-    color: "#FFF",
-  },
-  // ── Cards ──
-  emptyState: {
-    flex: 1,
+    paddingHorizontal: 18,
+    height: 38,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 40,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    elevation: 2
   },
-  emptyStateText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#999",
-    marginTop: 15,
-  },
-  emptyStateSubtext: { fontSize: 14, color: "#CCC", marginTop: 5 },
-  card: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 20,
-    marginBottom: 20,
-    overflow: "hidden",
-    elevation: 3,
-  },
-  cardMediaContainer: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: "hidden",
-  },
-  cardContent: { padding: 16, backgroundColor: "#FFF" },
-  cardSourceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  cardSource: { fontSize: 12, color: "#4169E1", fontWeight: "600" },
-  videoChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "#EEF2FF",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  videoChipText: { fontSize: 10, color: "#4169E1", fontWeight: "700" },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#212529",
-    marginBottom: 10,
-  },
-  cardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  categoryChipActive: { backgroundColor: "#4169E1", borderColor: "#4169E1" },
+  categoryChipText: { fontSize: 14, fontWeight: "600", color: "#555" },
+  categoryChipTextActive: { color: "#FFF" },
+
+  card: { backgroundColor: "#FFF", borderRadius: 20, marginBottom: 20, overflow: "hidden", elevation: 3 },
+  cardContent: { padding: 15 },
+  cardSource: { fontSize: 12, color: "#4169E1", fontWeight: "700", marginBottom: 5 },
+  cardTitle: { fontSize: 17, fontWeight: "700", color: "#212529", marginBottom: 10 },
+  cardFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   cardDate: { fontSize: 12, color: "#999" },
-  reactionRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  reactionButton: { padding: 2 },
-  reactionCount: { fontSize: 12, fontWeight: "700", color: "#999" },
-  reactionCountLike: { color: "#E63946" },
-  reactionCountDislike: { color: "#6B7280" },
-  reactionSeparator: { width: 8 },
+  reactionRow: { flexDirection: "row", alignItems: "center" },
+  reactionCount: { fontSize: 12, marginLeft: 4, fontWeight: "600", color: "#666" },
 });
