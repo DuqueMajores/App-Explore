@@ -445,27 +445,6 @@ export default function HomeScreen() {
           <Text style={styles.menuOptionText}>Forum</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => {
-            toggleMenu();
-            setShowDashboard(true);
-          }}
-        >
-          <MaterialIcons name="insights" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Analytics</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => {
-            toggleMenu();
-            router.replace("/");
-          }}
-        >
-          <MaterialIcons name="home" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Início</Text>
-        </TouchableOpacity>
       </Animated.View>
 
       {/* ── Search ── */}
@@ -688,6 +667,16 @@ export default function HomeScreen() {
           )
         }
       />
+
+      {/* ── Botão flutuante Início ── */}
+      <TouchableOpacity
+        style={styles.floatingHomeBtn}
+        onPress={() => router.replace("/")}
+        activeOpacity={0.7}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <MaterialIcons name="cached" size={22} color="#4169E1" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -887,4 +876,18 @@ const styles = StyleSheet.create({
   reactionCountLike: { color: "#E63946" },
   reactionCountDislike: { color: "#6B7280" },
   reactionSeparator: { width: 8 },
+  floatingHomeBtn: {
+    position: "absolute",
+    bottom: 24,
+    right: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(255,255,255,0.35)",
+    borderWidth: 1,
+    borderColor: "rgba(243, 243, 243, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+  },
 });
