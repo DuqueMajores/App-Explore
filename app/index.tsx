@@ -7,6 +7,7 @@ import {
   Animated,
   FlatList,
   Image,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -40,6 +41,19 @@ const safeR = (r: any): ArticleReactions => ({
   likes: Array.isArray(r?.likes) ? r.likes : [],
   dislikes: Array.isArray(r?.dislikes) ? r.dislikes : [],
 });
+
+// ── Categorias de filtro ───────────────────────────────────────────────────────
+const CATEGORIES = [
+  { label: "Brasil", query: "Brasil", icon: "🇧🇷" },
+  { label: "Tecnologia", query: "tecnologia", icon: "" },
+  { label: "Economia", query: "economia", icon: "" },
+  { label: "Esportes", query: "esportes", icon: "" },
+  { label: "Saúde", query: "saúde", icon: "" },
+  { label: "Política", query: "política", icon: "" },
+  { label: "Ciência", query: "ciência", icon: "" },
+  { label: "Entretenimento", query: "entretenimento", icon: "🎬" },
+  { label: "Mundo", query: "mundo", icon: "🌍" },
+];
 
 // ── Animated Card ──────────────────────────────────────────────────────────────
 const AnimatedCard = ({
@@ -81,6 +95,7 @@ const AnimatedCard = ({
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loadingArticles, setLoadingArticles] = useState(false);
@@ -125,44 +140,67 @@ export default function HomeScreen() {
     }
   }, [loading, user]);
 
-  const buscarNoticias = useCallback(async () => {
-    if (!search.trim() && articles.length > 0) return;
+  const buscarNoticias = useCallback(
+    async (queryOverride?: string) => {
+      const queryTerm = queryOverride !== undefined ? queryOverride : search;
+      if (!queryTerm.trim() && articles.length > 0) return;
 
-    const resolvedKey = (process.env.EXPO_PUBLIC_NEWS_API_KEY ?? "")
-      .replace(/["\s;]/g, "")
-      .trim();
+      const resolvedKey = (process.env.EXPO_PUBLIC_NEWS_API_KEY ?? "")
+        .replace(/["\s;]/g, "")
+        .trim();
 
-    if (!resolvedKey) {
-      Alert.alert(
-        "Configuração ausente",
-        "Defina EXPO_PUBLIC_NEWS_API_KEY no ambiente."
-      );
-      return;
-    }
+      if (!resolvedKey) {
+        Alert.alert(
+          "Configuração ausente",
+          "Defina EXPO_PUBLIC_NEWS_API_KEY no ambiente."
+        );
+        return;
+      }
 
-    setLoadingArticles(true);
-    const query = search.trim() || "Brasil";
-    const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(
-      query
-    )}&language=pt&sortBy=publishedAt&apiKey=${resolvedKey}`;
+      setLoadingArticles(true);
+      const query = queryTerm.trim() || "Brasil";
+      const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(
+        query
+      )}&language=pt&sortBy=publishedAt&apiKey=${resolvedKey}`;
 
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-      setArticles(Array.isArray(data.articles) ? data.articles : []);
-    } catch (error) {
-      console.error("Erro ao buscar notícias:", error);
-      Alert.alert("Erro", "Erro ao buscar notícias. Verifique sua conexão.");
-    } finally {
-      setLoadingArticles(false);
-    }
-  }, [articles.length, search]);
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        setArticles(Array.isArray(data.articles) ? data.articles : []);
+      } catch (error) {
+        console.error("Erro ao buscar notícias:", error);
+        Alert.alert("Erro", "Erro ao buscar notícias. Verifique sua conexão.");
+      } finally {
+        setLoadingArticles(false);
+      }
+    },
+    [articles.length, search]
+  );
 
   useEffect(() => {
     if (user && articles.length === 0) {
       buscarNoticias();
     }
   }, [articles.length, buscarNoticias, user]);
+
+  const handleCategoryPress = (cat: { label: string; query: string }) => {
+    if (activeCategory === cat.label) {
+      // Deselect
+      setActiveCategory(null);
+      setSearch("");
+      buscarNoticias("Brasil");
+    } else {
+      setActiveCategory(cat.label);
+      setSearch(cat.query);
+      buscarNoticias(cat.query);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearch("");
+    setActiveCategory(null);
+    buscarNoticias("Brasil");
+  };
 
   const toggleMenu = () => {
     const toValue = menuOpen ? 0 : 1;
@@ -291,7 +329,6 @@ export default function HomeScreen() {
           <Text style={styles.menuOptionText}>Rede</Text>
         </TouchableOpacity>
 
-        {/* ── NOVO: Galerias ── */}
         <TouchableOpacity
           style={styles.menuOption}
           onPress={() => {
@@ -336,17 +373,30 @@ export default function HomeScreen() {
         />
         <TextInput
           value={search}
-          onChangeText={setSearch}
+          onChangeText={(text) => {
+            setSearch(text);
+            if (text === "") setActiveCategory(null);
+          }}
           placeholder="Pesquisar notícias..."
           style={styles.input}
           placeholderTextColor="#CCC"
           editable={!loadingArticles}
           returnKeyType="search"
-          onSubmitEditing={buscarNoticias}
+          onSubmitEditing={() => buscarNoticias()}
         />
+        {search.length > 0 && (
+          <TouchableOpacity
+            onPress={handleClearSearch}
+            style={styles.clearButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            disabled={loadingArticles}
+          >
+            <MaterialIcons name="close" size={18} color="#999" />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.searchButton}
-          onPress={buscarNoticias}
+          onPress={() => buscarNoticias()}
           disabled={loadingArticles}
         >
           {loadingArticles ? (
@@ -356,6 +406,39 @@ export default function HomeScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* ── Categorias ── */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.categoriesRow}
+        contentContainerStyle={styles.categoriesContent}
+      >
+        {CATEGORIES.map((cat) => {
+          const isActive = activeCategory === cat.label;
+          return (
+            <TouchableOpacity
+              key={cat.label}
+              style={[
+                styles.categoryChip,
+                isActive && styles.categoryChipActive,
+              ]}
+              onPress={() => handleCategoryPress(cat)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.categoryChipIcon}>{cat.icon}</Text>
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  isActive && styles.categoryChipTextActive,
+                ]}
+              >
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {/* ── Lista de artigos ── */}
       <FlatList
@@ -571,9 +654,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
   },
+  // ── Search ──
   searchContainer: {
     flexDirection: "row",
-    marginBottom: 25,
+    marginBottom: 12,
     gap: 10,
     alignItems: "center",
   },
@@ -582,11 +666,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFF",
     borderRadius: 12,
-    paddingHorizontal: 40,
+    paddingLeft: 42,
+    paddingRight: 36,
     paddingVertical: 12,
     elevation: 2,
     fontSize: 16,
     color: "#333",
+  },
+  clearButton: {
+    position: "absolute",
+    right: 62,
+    zIndex: 2,
+    padding: 4,
   },
   searchButton: {
     backgroundColor: "#4169E1",
@@ -595,6 +686,47 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  // ── Categorias ──
+  categoriesRow: {
+    marginBottom: 16,
+    flexGrow: 0,
+    padding: 15,
+  },
+  categoriesContent: {
+    paddingRight: 4,
+    gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#FFF",
+    borderWidth: 1.5,
+    borderColor: "#E8E8E8",
+    elevation: 1,
+  },
+  categoryChipActive: {
+    backgroundColor: "#4169E1",
+    borderColor: "#4169E1",
+    elevation: 3,
+  },
+  categoryChipIcon: {
+    fontSize: 14,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#555",
+  },
+  categoryChipTextActive: {
+    color: "#FFF",
+  },
+  // ── Cards ──
   emptyState: {
     flex: 1,
     justifyContent: "center",
