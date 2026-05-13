@@ -44,14 +44,14 @@ const safeR = (r: any): ArticleReactions => ({
 
 // ── Categorias de filtro ───────────────────────────────────────────────────────
 const CATEGORIES = [
-  { label: "Brasil", query: "Brasil", icon: "🇧🇷" },
+  { label: "Brasil", query: "Brasil", icon: "" },
   { label: "Tecnologia", query: "tecnologia", icon: "" },
   { label: "Economia", query: "economia", icon: "" },
   { label: "Esportes", query: "esportes", icon: "" },
   { label: "Saúde", query: "saúde", icon: "" },
   { label: "Política", query: "política", icon: "" },
   { label: "Ciência", query: "ciência", icon: "" },
-  { label: "Entretenimento", query: "entretenimento", icon: "🎬" },
+  { label: "Entretenimento", query: "entretenimento", icon: "" },
   { label: "Mundo", query: "mundo", icon: "🌍" },
 ];
 
@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 15,
     borderRadius: 20,
     backgroundColor: "#FFF",
     borderWidth: 1.5,

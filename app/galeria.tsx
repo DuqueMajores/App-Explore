@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: "#F8F9FA",
-    maxHeight: 590, 
+    maxHeight: 620, 
   },
   header: {
     flexDirection: "row",
