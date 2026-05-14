@@ -42,6 +42,7 @@ export type ArticleReactions = {
 };
 
 const REACTIONS_KEY = "@App:articleReactions";
+const CUSTOM_CATEGORIES_KEY = "@App:customCategories";
 
 const safeR = (r: any): ArticleReactions => ({
   likes: Array.isArray(r?.likes) ? r.likes : [],
@@ -51,18 +52,20 @@ const safeR = (r: any): ArticleReactions => ({
   accessCount: typeof r?.accessCount === "number" ? r.accessCount : 0,
 });
 
-// ── Categorias de filtro ───────────────────────────────────────────────────────
-const CATEGORIES = [
-  { label: "Brasil", query: "Brasil", icon: "🇧🇷" },
-  { label: "Tecnologia", query: "tecnologia", icon: "" },
-  { label: "Economia", query: "economia", icon: "" },
-  { label: "Esportes", query: "esportes", icon: "" },
-  { label: "Saúde", query: "saúde", icon: "" },
-  { label: "Política", query: "política", icon: "" },
-  { label: "Ciência", query: "ciência", icon: "" },
-  { label: "Entretenimento", query: "entretenimento", icon: "🎬" },
-  { label: "Mundo", query: "mundo", icon: "🌍" },
+// ── Categorias padrão ─────────────────────────────────────────────────────────
+const DEFAULT_CATEGORIES = [
+  { label: "Brasil", query: "Brasil", icon: "🇧🇷", isDefault: true },
+  { label: "Tecnologia", query: "tecnologia", icon: "💻", isDefault: true },
+  { label: "Economia", query: "economia", icon: "📈", isDefault: true },
+  { label: "Esportes", query: "esportes", icon: "⚽", isDefault: true },
+  { label: "Saúde", query: "saúde", icon: "❤️", isDefault: true },
+  { label: "Política", query: "política", icon: "🏛️", isDefault: true },
+  { label: "Ciência", query: "ciência", icon: "🔬", isDefault: true },
+  { label: "Entretenimento", query: "entretenimento", icon: "🎬", isDefault: true },
+  { label: "Mundo", query: "mundo", icon: "🌍", isDefault: true },
 ];
+
+type Category = { label: string; query: string; icon: string; isDefault: boolean };
 
 // ── Animated Card ──────────────────────────────────────────────────────────────
 const AnimatedCard = ({
@@ -114,10 +117,18 @@ export default function HomeScreen() {
   // ── Dashboard #info ────────────────────────────────────────────────────────
   const [showDashboard, setShowDashboard] = useState(false);
 
+  // ── Categorias personalizadas ──────────────────────────────────────────────
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCatLabel, setNewCatLabel] = useState("");
+  const [newCatIcon, setNewCatIcon] = useState("");
+  const [editMode, setEditMode] = useState(false);
+
   const menuAnimation = useRef(new Animated.Value(0)).current;
 
-  // ── Carrega reações do storage ─────────────────────────────────────────────
+  // ── Carrega categorias salvas e reações do storage ─────────────────────────
   useEffect(() => {
+    // Carrega reações
     AsyncStorage.getItem(REACTIONS_KEY)
       .then((stored) => {
         if (stored) {
@@ -130,6 +141,109 @@ export default function HomeScreen() {
         }
       })
       .catch(() => {});
+
+    // Carrega categorias — storage é a fonte da verdade
+    AsyncStorage.getItem(CUSTOM_CATEGORIES_KEY)
+      .then((stored) => {
+        if (stored) {
+          // Já foi salvo antes: usa exatamente o que está no storage
+          setCategories(JSON.parse(stored) as Category[]);
+        } else {
+          // Primeira execução: persiste os defaults e usa eles
+          AsyncStorage.setItem(
+            CUSTOM_CATEGORIES_KEY,
+            JSON.stringify(DEFAULT_CATEGORIES)
+          ).catch(() => {});
+          setCategories(DEFAULT_CATEGORIES);
+        }
+      })
+      .catch(() => {
+        setCategories(DEFAULT_CATEGORIES);
+      });
+  }, []);
+
+  // ── Persiste categorias ────────────────────────────────────────────────────
+  const persistCategories = useCallback(async (cats: Category[]) => {
+    try {
+      await AsyncStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(cats));
+    } catch (e) {
+      console.error("Erro ao salvar categorias:", e);
+    }
+  }, []);
+
+  // ── Adiciona categoria personalizada ──────────────────────────────────────
+  const handleAddCategory = useCallback(() => {
+    const label = newCatLabel.trim();
+    if (!label) {
+      Alert.alert("Nome inválido", "Digite um nome para a categoria.");
+      return;
+    }
+    if (categories.some((c) => c.label.toLowerCase() === label.toLowerCase())) {
+      Alert.alert("Duplicada", "Já existe uma categoria com esse nome.");
+      return;
+    }
+    const newCat: Category = {
+      label,
+      query: label,
+      icon: newCatIcon.trim() || "🔍",
+      isDefault: false,
+    };
+    const updated = [...categories, newCat];
+    setCategories(updated);
+    persistCategories(updated);
+    setNewCatLabel("");
+    setNewCatIcon("");
+  }, [newCatLabel, newCatIcon, categories, persistCategories]);
+
+  // ── Remove categoria ───────────────────────────────────────────────────────
+  const handleRemoveCategory = useCallback(
+    (label: string) => {
+      Alert.alert(
+        "Remover categoria",
+        `Remover "${label}"?`,
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Remover",
+            style: "destructive",
+            onPress: () => {
+              const updated = categories.filter((c) => c.label !== label);
+              setCategories(updated);
+              persistCategories(updated);
+              if (activeCategory === label) {
+                setActiveCategory(null);
+                setSearch("");
+              }
+            },
+          },
+        ]
+      );
+    },
+    [categories, persistCategories, activeCategory]
+  );
+
+  // ── Restaura categorias padrão ─────────────────────────────────────────────
+  const handleRestoreDefaults = useCallback(() => {
+    Alert.alert(
+      "Restaurar padrões",
+      "Isso removerá suas categorias personalizadas e restaurará as originais.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Restaurar",
+          style: "destructive",
+          onPress: async () => {
+            setCategories(DEFAULT_CATEGORIES);
+            await AsyncStorage.setItem(
+              CUSTOM_CATEGORIES_KEY,
+              JSON.stringify(DEFAULT_CATEGORIES)
+            );
+            setActiveCategory(null);
+            setSearch("");
+          },
+        },
+      ]
+    );
   }, []);
 
   useFocusEffect(
@@ -208,10 +322,16 @@ export default function HomeScreen() {
   const handleSearchChange = (text: string) => {
     setSearch(text);
     if (text === "") setActiveCategory(null);
-    // Abre dashboard imediatamente ao digitar "#info" completo
     if (text.trim().toLowerCase() === "#info") {
       setShowDashboard(true);
     }
+  };
+
+  // ── Limpa busca ───────────────────────────────────────────────────────────
+  const handleClearSearch = () => {
+    setSearch("");
+    setActiveCategory(null);
+    buscarNoticias("Brasil");
   };
 
   // ── Rastreia acesso ao artigo completo ─────────────────────────────────────
@@ -241,7 +361,7 @@ export default function HomeScreen() {
     [reactions, user]
   );
 
-  const handleCategoryPress = (cat: { label: string; query: string }) => {
+  const handleCategoryPress = (cat: Category) => {
     if (activeCategory === cat.label) {
       setActiveCategory(null);
       setSearch("");
@@ -251,12 +371,6 @@ export default function HomeScreen() {
       setSearch(cat.query);
       buscarNoticias(cat.query);
     }
-  };
-
-  const handleClearSearch = () => {
-    setSearch("");
-    setActiveCategory(null);
-    buscarNoticias("Brasil");
   };
 
   const toggleMenu = () => {
@@ -304,7 +418,6 @@ export default function HomeScreen() {
           ...current,
           likes: newLikes,
           dislikes: newDislikes,
-          // Salva o título e categoria junto com a reação
           title: article.title ?? current.title,
           category: activeCategory ?? current.category,
         },
@@ -362,6 +475,129 @@ export default function HomeScreen() {
             setSearch("");
           }}
         />
+      </Modal>
+
+      {/* ── Modal de Gerenciar Categorias ── */}
+      <Modal
+        visible={showCategoryModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          setShowCategoryModal(false);
+          setEditMode(false);
+          setNewCatLabel("");
+          setNewCatIcon("");
+        }}
+      >
+        <TouchableWithoutFeedback
+          onPress={() => {
+            setShowCategoryModal(false);
+            setEditMode(false);
+            setNewCatLabel("");
+            setNewCatIcon("");
+          }}
+        >
+          <View style={styles.catModalOverlay} />
+        </TouchableWithoutFeedback>
+
+        <View style={styles.catModalContainer}>
+          {/* Header do modal */}
+          <View style={styles.catModalHeader}>
+            <Text style={styles.catModalTitle}>Categorias</Text>
+            <View style={styles.catModalHeaderActions}>
+              <TouchableOpacity
+                onPress={() => setEditMode((v) => !v)}
+                style={[styles.catModalEditBtn, editMode && styles.catModalEditBtnActive]}
+              >
+                <MaterialIcons
+                  name={editMode ? "check" : "edit"}
+                  size={18}
+                  color={editMode ? "#FFF" : "#4169E1"}
+                />
+                <Text style={[styles.catModalEditText, editMode && styles.catModalEditTextActive]}>
+                  {editMode ? "Concluir" : "Editar"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCategoryModal(false);
+                  setEditMode(false);
+                  setNewCatLabel("");
+                  setNewCatIcon("");
+                }}
+                style={styles.catModalCloseBtn}
+              >
+                <MaterialIcons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Lista de categorias */}
+          <ScrollView
+            style={styles.catModalList}
+            showsVerticalScrollIndicator={false}
+          >
+            {categories.map((cat) => (
+              <View key={cat.label} style={styles.catModalItem}>
+                <Text style={styles.catModalItemIcon}>{cat.icon}</Text>
+                <Text style={styles.catModalItemLabel}>{cat.label}</Text>
+                {editMode && (
+                  <TouchableOpacity
+                    onPress={() => handleRemoveCategory(cat.label)}
+                    style={styles.catModalRemoveBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <MaterialIcons name="remove-circle" size={22} color="#E63946" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Adicionar nova categoria */}
+          <View style={styles.catModalAddSection}>
+            <Text style={styles.catModalAddTitle}>Adicionar categoria</Text>
+            <View style={styles.catModalAddRow}>
+              <TextInput
+                style={styles.catModalIconInput}
+                value={newCatIcon}
+                onChangeText={setNewCatIcon}
+                placeholder="🔍"
+                placeholderTextColor="#CCC"
+                maxLength={2}
+              />
+              <TextInput
+                style={styles.catModalLabelInput}
+                value={newCatLabel}
+                onChangeText={setNewCatLabel}
+                placeholder="Nome da categoria..."
+                placeholderTextColor="#CCC"
+                maxLength={30}
+                returnKeyType="done"
+                onSubmitEditing={handleAddCategory}
+              />
+              <TouchableOpacity
+                onPress={handleAddCategory}
+                style={[
+                  styles.catModalAddBtn,
+                  !newCatLabel.trim() && styles.catModalAddBtnDisabled,
+                ]}
+                disabled={!newCatLabel.trim()}
+              >
+                <MaterialIcons name="add" size={22} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Restaurar padrões */}
+            <TouchableOpacity
+              onPress={handleRestoreDefaults}
+              style={styles.catModalRestoreBtn}
+            >
+              <MaterialIcons name="restore" size={16} color="#999" />
+              <Text style={styles.catModalRestoreText}>Restaurar categorias padrão</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* ── Header ── */}
@@ -444,7 +680,6 @@ export default function HomeScreen() {
           <MaterialIcons name="forum" size={22} color="#4169E1" />
           <Text style={styles.menuOptionText}>Forum</Text>
         </TouchableOpacity>
-
       </Animated.View>
 
       {/* ── Search ── */}
@@ -458,7 +693,7 @@ export default function HomeScreen() {
         <TextInput
           value={search}
           onChangeText={handleSearchChange}
-          placeholder='Pesquisar notícias… ou digite "#info"'
+          placeholder='Pesquisar notícias… ou "#info"'
           style={styles.input}
           placeholderTextColor="#CCC"
           editable={!loadingArticles}
@@ -469,10 +704,12 @@ export default function HomeScreen() {
           <TouchableOpacity
             onPress={handleClearSearch}
             style={styles.clearButton}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             disabled={loadingArticles}
           >
-            <MaterialIcons name="close" size={18} color="#999" />
+            <View style={styles.clearButtonInner}>
+              <MaterialIcons name="close" size={14} color="#FFF" />
+            </View>
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -489,37 +726,50 @@ export default function HomeScreen() {
       </View>
 
       {/* ── Categorias ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesRow}
-        contentContainerStyle={styles.categoriesContent}
-      >
-        {CATEGORIES.map((cat) => {
-          const isActive = activeCategory === cat.label;
-          return (
-            <TouchableOpacity
-              key={cat.label}
-              style={[
-                styles.categoryChip,
-                isActive && styles.categoryChipActive,
-              ]}
-              onPress={() => handleCategoryPress(cat)}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.categoryChipIcon}>{cat.icon}</Text>
-              <Text
+      <View style={styles.categoriesWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesRow}
+          contentContainerStyle={styles.categoriesContent}
+        >
+          {categories.map((cat) => {
+            const isActive = activeCategory === cat.label;
+            return (
+              <TouchableOpacity
+                key={cat.label}
                 style={[
-                  styles.categoryChipText,
-                  isActive && styles.categoryChipTextActive,
+                  styles.categoryChip,
+                  isActive && styles.categoryChipActive,
                 ]}
+                onPress={() => handleCategoryPress(cat)}
+                activeOpacity={0.75}
               >
-                {cat.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+                {cat.icon ? (
+                  <Text style={styles.categoryChipIcon}>{cat.icon}</Text>
+                ) : null}
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    isActive && styles.categoryChipTextActive,
+                  ]}
+                >
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Botão de gerenciar categorias */}
+          <TouchableOpacity
+            style={styles.manageCategoriesBtn}
+            onPress={() => setShowCategoryModal(true)}
+            activeOpacity={0.75}
+          >
+            <MaterialIcons name="tune" size={16} color="#4169E1" />
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
 
       {/* ── Lista de artigos ── */}
       <FlatList
@@ -544,7 +794,6 @@ export default function HomeScreen() {
                 style={styles.card}
                 activeOpacity={0.9}
                 onPress={() => {
-                  // Rastreia acesso antes de navegar
                   trackArticleAccess(item, activeCategory ?? undefined);
                   router.push({
                     pathname: "/explore",
@@ -675,7 +924,7 @@ export default function HomeScreen() {
         activeOpacity={0.7}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <MaterialIcons name="cached" size={22} color="#4169E1" />
+        <MaterialIcons name="home" size={22} color="#4169E1" />
       </TouchableOpacity>
     </View>
   );
@@ -753,6 +1002,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
   },
+
+  // ── Search ─────────────────────────────────────────────────────────────────
   searchContainer: {
     flexDirection: "row",
     marginBottom: 12,
@@ -765,7 +1016,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     borderRadius: 12,
     paddingLeft: 42,
-    paddingRight: 36,
+    paddingRight: 42,
     paddingVertical: 12,
     elevation: 2,
     fontSize: 15,
@@ -775,7 +1026,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 62,
     zIndex: 2,
-    padding: 4,
+  },
+  clearButtonInner: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#BDBDBD",
+    justifyContent: "center",
+    alignItems: "center",
   },
   searchButton: {
     backgroundColor: "#4169E1",
@@ -784,16 +1042,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  categoriesRow: {
+
+  // ── Categories ─────────────────────────────────────────────────────────────
+  categoriesWrapper: {
     marginBottom: 16,
+  },
+  categoriesRow: {
     flexGrow: 0,
-    padding: 15,
   },
   categoriesContent: {
     paddingRight: 4,
     gap: 8,
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 4,
   },
   categoryChip: {
     flexDirection: "row",
@@ -815,6 +1077,180 @@ const styles = StyleSheet.create({
   categoryChipIcon: { fontSize: 14 },
   categoryChipText: { fontSize: 13, fontWeight: "600", color: "#555" },
   categoryChipTextActive: { color: "#FFF" },
+  manageCategoriesBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1.5,
+    borderColor: "#C7D2FE",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 1,
+  },
+
+  // ── Category Modal ─────────────────────────────────────────────────────────
+  catModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  catModalContainer: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "75%",
+    paddingBottom: 34,
+  },
+  catModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  catModalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#212529",
+  },
+  catModalHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  catModalEditBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: "#4169E1",
+    backgroundColor: "#FFF",
+  },
+  catModalEditBtnActive: {
+    backgroundColor: "#4169E1",
+    borderColor: "#4169E1",
+  },
+  catModalEditText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#4169E1",
+  },
+  catModalEditTextActive: {
+    color: "#FFF",
+  },
+  catModalCloseBtn: {
+    padding: 4,
+  },
+  catModalList: {
+    paddingHorizontal: 20,
+    maxHeight: 280,
+  },
+  catModalItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F5F5F5",
+    gap: 12,
+  },
+  catModalItemIcon: {
+    fontSize: 20,
+    width: 28,
+    textAlign: "center",
+  },
+  catModalItemLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#212529",
+    flex: 1,
+  },
+  catModalRemoveBtn: {
+    padding: 2,
+  },
+  catModalDefaultBadge: {
+    backgroundColor: "#EEF2FF",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  catModalDefaultText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#4169E1",
+  },
+  catModalAddSection: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  catModalAddTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#999",
+    marginBottom: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  catModalAddRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  catModalIconInput: {
+    width: 48,
+    height: 48,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E8E8E8",
+    textAlign: "center",
+    fontSize: 22,
+    color: "#333",
+  },
+  catModalLabelInput: {
+    flex: 1,
+    height: 48,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E8E8E8",
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: "#333",
+  },
+  catModalAddBtn: {
+    width: 48,
+    height: 48,
+    backgroundColor: "#4169E1",
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  catModalAddBtnDisabled: {
+    backgroundColor: "#A0B4F0",
+  },
+  catModalRestoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "center",
+    paddingVertical: 8,
+  },
+  catModalRestoreText: {
+    fontSize: 13,
+    color: "#999",
+    fontWeight: "600",
+  },
+
+  // ── Articles ───────────────────────────────────────────────────────────────
   emptyState: {
     flex: 1,
     justifyContent: "center",
@@ -885,7 +1321,7 @@ const styles = StyleSheet.create({
     borderRadius: 23,
     backgroundColor: "rgba(255,255,255,0.35)",
     borderWidth: 1,
-    borderColor: "rgba(243, 243, 243, 0.1)",
+    borderColor: "rgba(65,105,225,0.25)",
     justifyContent: "center",
     alignItems: "center",
     elevation: 4,
