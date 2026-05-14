@@ -3,7 +3,7 @@
  * Tela pública de galerias — exibe todas as fotos ativas (24h),
  * agrupadas por usuário, ordenadas por curtidas.
  */
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGallery, GalleryPhoto } from "../src/context/GalleryContex";
 import { useAuth } from "../src/context/AuthContext";
 import StoryRing from "../components/StoryRing";
@@ -37,6 +38,21 @@ export default function GaleriasScreen() {
   const { getActivePhotos, toggleLike } = useGallery();
   const { user } = useAuth();
   const [selectedPhoto, setSelectedPhoto] = useState<GalleryPhoto | null>(null);
+  const [userPhotosMap, setUserPhotosMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    AsyncStorage.getItem("@App:users")
+      .then((raw) => {
+        if (!raw) return;
+        const users: any[] = JSON.parse(raw);
+        const map: Record<string, string> = {};
+        for (const u of users) {
+          if (u.email && u.photo) map[u.email] = u.photo;
+        }
+        setUserPhotosMap(map);
+      })
+      .catch(() => {});
+  }, []);
 
   const activePhotos = getActivePhotos();
 
@@ -130,7 +146,7 @@ export default function GaleriasScreen() {
                 <StoryRing
                   userEmail={group.userEmail}
                   userName={group.userName}
-                  userPhoto={group.userPhoto}
+                  userPhoto={userPhotosMap[group.userEmail] ?? group.userPhoto}
                   size={48}
                   currentUserEmail={user?.email}
                 />
@@ -230,9 +246,9 @@ export default function GaleriasScreen() {
 
             <View style={styles.modalFooter}>
               <View style={styles.modalUser}>
-                {selectedPhoto.userPhoto ? (
+                {(userPhotosMap[selectedPhoto.userEmail] ?? selectedPhoto.userPhoto) ? (
                   <Image
-                    source={{ uri: selectedPhoto.userPhoto }}
+                    source={{ uri: userPhotosMap[selectedPhoto.userEmail] ?? selectedPhoto.userPhoto }}
                     style={styles.modalAvatar}
                   />
                 ) : (
@@ -299,7 +315,7 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: "#F8F9FA",
-    maxHeight: 620, 
+    maxHeight: "auto", 
   },
   header: {
     flexDirection: "row",

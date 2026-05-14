@@ -325,7 +325,7 @@ export default function InfoDashboard({ reactions, onClose }: InfoDashboardProps
         </View>
 
         <View style={styles.metricsRow}>
-          <MetricCard icon="newspaper" label="Notícias salvas" value={stats.totalArticles} color="#F59E0B" />
+          <MetricCard icon="newspaper" label="Notícias Lidas" value={stats.totalArticles} color="#F59E0B" />
           <MetricCard
             icon="trending-up"
             label="Engaj./notícia"
