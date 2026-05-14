@@ -251,6 +251,20 @@ export default function HomeScreen() {
       if (!loading && !user && hasInitialized) {
         router.replace("/login");
       }
+      // Reload reactions from storage every time screen is focused
+      // so swipe-reactions from explore.tsx appear immediately
+      AsyncStorage.getItem(REACTIONS_KEY)
+        .then((stored) => {
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const migrated: Record<string, ArticleReactions> = {};
+            for (const key of Object.keys(parsed)) {
+              migrated[key] = safeR(parsed[key]);
+            }
+            setReactions(migrated);
+          }
+        })
+        .catch(() => {});
     }, [hasInitialized, loading, user])
   );
 
@@ -806,6 +820,9 @@ export default function HomeScreen() {
                         item.urlToImage ??
                         "https://via.placeholder.com/400x200",
                       url: item.url ?? "",
+                      category: activeCategory ?? "",
+                      articlesJson: JSON.stringify(articles),
+                      startIndex: String(index),
                     },
                   });
                 }}
