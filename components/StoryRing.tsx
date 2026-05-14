@@ -20,6 +20,7 @@ import {
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { GalleryPhoto, useGallery } from "../src/context/GalleryContex";
+import { useNotification } from "../src/context/NotificationContext";
 
 const { width, height } = Dimensions.get("window");
 const STORY_DURATION = 5000; // 5s por foto
@@ -32,6 +33,7 @@ interface StoryRingProps {
   isOwn?: boolean;
   onAddPhoto?: () => void;
   currentUserEmail?: string;
+  currentUserName?: string;
 }
 
 // ── Barra de progresso de cada story ──────────────────────────────────────────
@@ -99,15 +101,18 @@ function StoryViewer({
   userName,
   userPhoto,
   currentUserEmail,
+  currentUserName,
   onClose,
 }: {
   photos: GalleryPhoto[];
   userName: string;
   userPhoto?: string;
   currentUserEmail?: string;
+  currentUserName?: string;
   onClose: () => void;
 }) {
   const { toggleLike, deletePhoto } = useGallery();
+  const { sendNotification } = useNotification();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,9 +136,20 @@ function StoryViewer({
     };
   }, [index, paused]);
 
-  const handleLike = () => {
+  const handleLike = async () => {
     if (!currentUserEmail || !current) return;
+    const wasLiked = current.likes.includes(currentUserEmail);
     toggleLike(current.id, currentUserEmail);
+    // Send notification only when adding a like (not removing) and not own photo
+    if (!wasLiked && current.userEmail !== currentUserEmail) {
+      try {
+        await sendNotification({
+          type: "photo_like" as any,
+          fromName: currentUserName ?? currentUserEmail,
+          targetEmail: current.userEmail,
+        });
+      } catch {}
+    }
   };
 
   const handleDelete = () => {
@@ -202,6 +218,31 @@ function StoryViewer({
         resizeMode="contain"
       />
 
+      {/* Ações — sobrepostas à imagem, no canto inferior direito da foto */}
+      <View style={viewerStyles.actionsOverlay} pointerEvents="box-none">
+        <View style={viewerStyles.actionsRow}>
+          <View style={viewerStyles.footerLeft}>
+            <MaterialIcons name="favorite" size={14} color="rgba(255,255,255,0.7)" />
+            <Text style={viewerStyles.likeCount}>{current?.likes?.length ?? 0}</Text>
+          </View>
+          <View style={viewerStyles.footerRight}>
+            {isOwn ? (
+              <TouchableOpacity onPress={handleDelete} style={viewerStyles.actionBtn}>
+                <MaterialIcons name="delete-outline" size={26} color="#FF6B6B" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={handleLike} style={viewerStyles.actionBtn}>
+                <MaterialIcons
+                  name={isLiked ? "favorite" : "favorite-border"}
+                  size={28}
+                  color={isLiked ? "#FF6B6B" : "#FFF"}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </View>
+
       {/* Toque esquerda/direita */}
       <View style={viewerStyles.tapZones}>
         <TouchableWithoutFeedback onPress={goPrev} onLongPress={() => setPaused(true)} onPressOut={() => setPaused(false)}>
@@ -210,29 +251,6 @@ function StoryViewer({
         <TouchableWithoutFeedback onPress={goNext} onLongPress={() => setPaused(true)} onPressOut={() => setPaused(false)}>
           <View style={viewerStyles.tapRight} />
         </TouchableWithoutFeedback>
-      </View>
-
-      {/* Ações */}
-      <View style={viewerStyles.footer}>
-        <View style={viewerStyles.footerLeft}>
-          <MaterialIcons name="favorite" size={14} color="rgba(255,255,255,0.7)" />
-          <Text style={viewerStyles.likeCount}>{current?.likes?.length ?? 0}</Text>
-        </View>
-        <View style={viewerStyles.footerRight}>
-          {isOwn ? (
-            <TouchableOpacity onPress={handleDelete} style={viewerStyles.actionBtn}>
-              <MaterialIcons name="delete-outline" size={26} color="#FF6B6B" />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity onPress={handleLike} style={viewerStyles.actionBtn}>
-              <MaterialIcons
-                name={isLiked ? "favorite" : "favorite-border"}
-                size={28}
-                color={isLiked ? "#FF6B6B" : "#FFF"}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
       </View>
     </View>
   );
@@ -275,14 +293,21 @@ const viewerStyles = StyleSheet.create({
   tapZones: { ...StyleSheet.absoluteFillObject, flexDirection: "row", top: 100 },
   tapLeft: { flex: 1 },
   tapRight: { flex: 1 },
-  footer: {
+  actionsOverlay: {
+    position: "absolute",
+    bottom: Platform.OS === "ios" ? 44 : 24,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    paddingBottom: 14,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    zIndex: 20,
+  },
+  actionsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: Platform.OS === "ios" ? 36 : 20,
-    backgroundColor: "rgba(0,0,0,0.4)",
   },
   footerLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
   likeCount: { color: "rgba(255,255,255,0.8)", fontWeight: "700", fontSize: 14 },
@@ -299,6 +324,7 @@ export default function StoryRing({
   isOwn = false,
   onAddPhoto,
   currentUserEmail,
+  currentUserName,
 }: StoryRingProps) {
   const { getPhotosByUser } = useGallery();
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -413,6 +439,7 @@ export default function StoryRing({
           userName={userName}
           userPhoto={userPhoto}
           currentUserEmail={currentUserEmail}
+          currentUserName={currentUserName}
           onClose={() => setViewerOpen(false)}
         />
       </Modal>

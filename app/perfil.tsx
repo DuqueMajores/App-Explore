@@ -6,8 +6,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Modal,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +21,7 @@ import {
 } from "react-native";
 import { useAuth } from "../src/context/AuthContext";
 import { useGallery, GalleryPhoto } from "../src/context/GalleryContex";
+import { useNotification } from "../src/context/NotificationContext";
 import StoryRing from "../components/StoryRing";
 
 const { width } = Dimensions.get("window");
@@ -40,13 +43,23 @@ interface PublicUser {
 function ProfileGallery({
   userEmail,
   currentUserEmail,
+  currentUserName,
 }: {
   userEmail: string;
   currentUserEmail?: string;
+  currentUserName?: string;
 }) {
   const { getPhotosByUser, toggleLike, deletePhoto } = useGallery();
-  const [selected, setSelected] = useState<GalleryPhoto | null>(null);
+  const { sendNotification } = useNotification();
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [localPhotos, setLocalPhotos] = useState<GalleryPhoto[]>([]);
   const photos = getPhotosByUser(userEmail);
+  const translateX = React.useRef(new Animated.Value(0)).current;
+
+  // Keep local copy in sync so likes update inside modal
+  React.useEffect(() => { setLocalPhotos(photos); }, [photos]);
+
+  const selected = selectedIndex !== null ? localPhotos[selectedIndex] : null;
 
   const timeLeft = (photo: GalleryPhoto) => {
     const diff = new Date(photo.expiresAt).getTime() - Date.now();
@@ -55,6 +68,69 @@ function ProfileGallery({
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
   };
+
+  const goTo = (nextIndex: number, direction: "left" | "right") => {
+    if (nextIndex < 0 || nextIndex >= localPhotos.length) return;
+    const outX = direction === "left" ? -width : width;
+    Animated.sequence([
+      Animated.timing(translateX, { toValue: outX, duration: 180, useNativeDriver: true }),
+    ]).start(() => {
+      translateX.setValue(-outX);
+      setSelectedIndex(nextIndex);
+      Animated.timing(translateX, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+    });
+  };
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 10,
+      onPanResponderMove: (_, g) => { translateX.setValue(g.dx); },
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -50) {
+          setSelectedIndex((prev) => {
+            if (prev === null) return prev;
+            goTo(prev + 1, "left");
+            return prev;
+          });
+        } else if (g.dx > 50) {
+          setSelectedIndex((prev) => {
+            if (prev === null) return prev;
+            goTo(prev - 1, "right");
+            return prev;
+          });
+        } else {
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
+
+  // Rebuild panResponder callbacks with up-to-date index
+  const swipe = React.useCallback((dx: number) => {
+    if (selectedIndex === null) return;
+    if (dx < -50) goTo(selectedIndex + 1, "left");
+    else if (dx > 50) goTo(selectedIndex - 1, "right");
+    else Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+  }, [selectedIndex, localPhotos.length]);
+
+  const pan = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 10,
+      onPanResponderMove: (_, g) => { translateX.setValue(g.dx); },
+      onPanResponderRelease: (_, g) => { swipe(g.dx); },
+    })
+  ).current;
+
+  // Update pan responder when swipe callback changes
+  React.useEffect(() => {
+    (pan as any)._handleStartShouldSetPanResponder = () => false;
+    (pan as any)._handleMoveShouldSetPanResponder = (_: any, g: any) =>
+      Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 10;
+    (pan as any)._handlePanResponderMove = (_: any, g: any) => { translateX.setValue(g.dx); };
+    (pan as any)._handlePanResponderEnd = (_: any, g: any) => { swipe(g.dx); };
+  }, [swipe]);
 
   return (
     <View style={galStyles.card}>
@@ -75,7 +151,7 @@ function ProfileGallery({
         </View>
       ) : (
         <View style={galStyles.grid}>
-          {photos.map((photo) => {
+          {photos.map((photo, idx) => {
             const liked = currentUserEmail
               ? photo.likes.includes(currentUserEmail)
               : false;
@@ -84,7 +160,10 @@ function ProfileGallery({
                 key={photo.id}
                 style={galStyles.thumb}
                 activeOpacity={0.85}
-                onPress={() => setSelected(photo)}
+                onPress={() => {
+                  translateX.setValue(0);
+                  setSelectedIndex(idx);
+                }}
               >
                 <Image
                   source={{ uri: photo.imageUri }}
@@ -93,14 +172,8 @@ function ProfileGallery({
                 />
                 {photo.likes.length > 0 && (
                   <View style={galStyles.thumbBadge}>
-                    <MaterialIcons
-                      name="favorite"
-                      size={10}
-                      color="#FF6B6B"
-                    />
-                    <Text style={galStyles.thumbLikes}>
-                      {photo.likes.length}
-                    </Text>
+                    <MaterialIcons name="favorite" size={10} color="#FF6B6B" />
+                    <Text style={galStyles.thumbLikes}>{photo.likes.length}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -109,26 +182,76 @@ function ProfileGallery({
         </View>
       )}
 
-      {/* Modal de foto ampliada */}
-      {selected && (
-        <Modal
-          visible={!!selected}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setSelected(null)}
-        >
-          <View style={galStyles.modalBg}>
-            <TouchableOpacity
-              style={galStyles.modalClose}
-              onPress={() => setSelected(null)}
+      {/* Modal de foto ampliada com swipe */}
+      <Modal
+        visible={selectedIndex !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedIndex(null)}
+      >
+        <View style={galStyles.modalBg}>
+          <TouchableOpacity
+            style={galStyles.modalClose}
+            onPress={() => setSelectedIndex(null)}
+          >
+            <MaterialIcons name="close" size={28} color="#FFF" />
+          </TouchableOpacity>
+
+          {/* Dot indicators */}
+          {localPhotos.length > 1 && selectedIndex !== null && (
+            <View style={galStyles.dotsRow}>
+              {localPhotos.map((_, i) => (
+                <View
+                  key={i}
+                  style={[galStyles.dot, i === selectedIndex && galStyles.dotActive]}
+                />
+              ))}
+            </View>
+          )}
+
+          {selected && (
+            <Animated.View
+              style={[galStyles.swipeContainer, { transform: [{ translateX }] }]}
+              {...(PanResponder.create({
+                onStartShouldSetPanResponder: () => false,
+                onMoveShouldSetPanResponder: (_, g) =>
+                  Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 10,
+                onPanResponderMove: (_, g) => { translateX.setValue(g.dx); },
+                onPanResponderRelease: (_, g) => {
+                  if (selectedIndex === null) return;
+                  if (g.dx < -50) goTo(selectedIndex + 1, "left");
+                  else if (g.dx > 50) goTo(selectedIndex - 1, "right");
+                  else Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+                },
+              }).panHandlers)}
             >
-              <MaterialIcons name="close" size={28} color="#FFF" />
+              <Image
+                source={{ uri: selected.imageUri }}
+                style={galStyles.modalImg}
+                resizeMode="contain"
+              />
+            </Animated.View>
+          )}
+
+          {/* Prev / Next arrows */}
+          {selectedIndex !== null && selectedIndex > 0 && (
+            <TouchableOpacity
+              style={galStyles.arrowLeft}
+              onPress={() => goTo(selectedIndex - 1, "right")}
+            >
+              <MaterialIcons name="chevron-left" size={36} color="#FFF" />
             </TouchableOpacity>
-            <Image
-              source={{ uri: selected.imageUri }}
-              style={galStyles.modalImg}
-              resizeMode="contain"
-            />
+          )}
+          {selectedIndex !== null && selectedIndex < localPhotos.length - 1 && (
+            <TouchableOpacity
+              style={galStyles.arrowRight}
+              onPress={() => goTo(selectedIndex + 1, "left")}
+            >
+              <MaterialIcons name="chevron-right" size={36} color="#FFF" />
+            </TouchableOpacity>
+          )}
+
+          {selected && (
             <View style={galStyles.modalFooter}>
               <Text style={galStyles.modalExpiry}>
                 Expira em {timeLeft(selected)}
@@ -137,60 +260,60 @@ function ProfileGallery({
                 {currentUserEmail && currentUserEmail !== selected.userEmail ? (
                   <TouchableOpacity
                     onPress={() => {
+                      const wasLiked = selected.likes.includes(currentUserEmail!);
                       toggleLike(selected.id, currentUserEmail!);
-                      setSelected((prev) => {
-                        if (!prev || !currentUserEmail) return prev;
-                        const liked = prev.likes.includes(currentUserEmail);
-                        return {
-                          ...prev,
-                          likes: liked
-                            ? prev.likes.filter((e) => e !== currentUserEmail)
-                            : [...prev.likes, currentUserEmail],
-                        };
-                      });
+                      if (!wasLiked) {
+                        sendNotification({
+                          type: "photo_like",
+                          fromName: currentUserName ?? currentUserEmail,
+                          targetEmail: selected.userEmail,
+                        }).catch(() => {});
+                      }
+                      setLocalPhotos((prev) =>
+                        prev.map((p) => {
+                          if (p.id !== selected.id) return p;
+                          const liked = p.likes.includes(currentUserEmail!);
+                          return {
+                            ...p,
+                            likes: liked
+                              ? p.likes.filter((e) => e !== currentUserEmail)
+                              : [...p.likes, currentUserEmail!],
+                          };
+                        })
+                      );
                     }}
                     style={galStyles.modalActionBtn}
                   >
                     <MaterialIcons
-                      name={
-                        currentUserEmail &&
-                        selected.likes.includes(currentUserEmail)
-                          ? "favorite"
-                          : "favorite-border"
-                      }
+                      name={selected.likes.includes(currentUserEmail) ? "favorite" : "favorite-border"}
                       size={28}
-                      color={
-                        currentUserEmail &&
-                        selected.likes.includes(currentUserEmail)
-                          ? "#FF6B6B"
-                          : "#FFF"
-                      }
+                      color={selected.likes.includes(currentUserEmail) ? "#FF6B6B" : "#FFF"}
                     />
-                    <Text style={galStyles.modalLikeCount}>
-                      {selected.likes.length}
-                    </Text>
+                    <Text style={galStyles.modalLikeCount}>{selected.likes.length}</Text>
                   </TouchableOpacity>
                 ) : null}
                 {currentUserEmail === selected.userEmail && (
                   <TouchableOpacity
                     onPress={() => {
                       deletePhoto(selected.id);
-                      setSelected(null);
+                      setLocalPhotos((prev) => prev.filter((p) => p.id !== selected.id));
+                      setSelectedIndex((prev) => {
+                        if (prev === null) return null;
+                        const newLen = localPhotos.length - 1;
+                        if (newLen === 0) return null;
+                        return Math.min(prev, newLen - 1);
+                      });
                     }}
                     style={galStyles.modalActionBtn}
                   >
-                    <MaterialIcons
-                      name="delete-outline"
-                      size={28}
-                      color="#FF6B6B"
-                    />
+                    <MaterialIcons name="delete-outline" size={28} color="#FF6B6B" />
                   </TouchableOpacity>
                 )}
               </View>
             </View>
-          </View>
-        </Modal>
-      )}
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -244,6 +367,7 @@ const galStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.95)",
     justifyContent: "center",
+    overflow: "hidden",
   },
   modalClose: {
     position: "absolute",
@@ -252,7 +376,51 @@ const galStyles = StyleSheet.create({
     zIndex: 10,
     padding: 6,
   },
-  modalImg: { width: "100%", height: "70%" },
+  swipeContainer: {
+    width: "100%",
+    height: "70%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalImg: { width: "100%", height: "100%" },
+  dotsRow: {
+    position: "absolute",
+    top: 110,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    zIndex: 10,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.35)",
+  },
+  dotActive: {
+    backgroundColor: "#FFF",
+    width: 18,
+  },
+  arrowLeft: {
+    position: "absolute",
+    left: 12,
+    top: "50%",
+    zIndex: 10,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderRadius: 20,
+    padding: 4,
+  },
+  arrowRight: {
+    position: "absolute",
+    right: 12,
+    top: "50%",
+    zIndex: 10,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderRadius: 20,
+    padding: 4,
+  },
   modalFooter: {
     position: "absolute",
     bottom: 0,
@@ -354,6 +522,7 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
             userPhoto={target.photo}
             size={90}
             currentUserEmail={loggedUser?.email}
+            currentUserName={loggedUser?.name}
           />
         </View>
 
@@ -408,6 +577,7 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
       <ProfileGallery
         userEmail={target.email}
         currentUserEmail={loggedUser?.email}
+        currentUserName={loggedUser?.name}
       />
 
       {/* Info card */}
@@ -618,6 +788,7 @@ export default function ProfileScreen() {
             isOwn
             onAddPhoto={handleAddStoryPhoto}
             currentUserEmail={user.email}
+            currentUserName={user.name}
           />
         </View>
 
@@ -684,6 +855,7 @@ export default function ProfileScreen() {
       <ProfileGallery
         userEmail={user.email}
         currentUserEmail={user.email}
+        currentUserName={user.name}
       />
 
       {/* ── Info Section ── */}

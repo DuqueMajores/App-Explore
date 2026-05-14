@@ -13,12 +13,15 @@ import {
   StyleSheet,
   Dimensions,
   Modal,
+  Animated,
+  PanResponder,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGallery, GalleryPhoto } from "../src/context/GalleryContex";
 import { useAuth } from "../src/context/AuthContext";
+import { useNotification } from "../src/context/NotificationContext";
 import StoryRing from "../components/StoryRing";
 
 const { width } = Dimensions.get("window");
@@ -37,8 +40,34 @@ interface UserGroup {
 export default function GaleriasScreen() {
   const { getActivePhotos, toggleLike } = useGallery();
   const { user } = useAuth();
-  const [selectedPhoto, setSelectedPhoto] = useState<GalleryPhoto | null>(null);
+  const { sendNotification } = useNotification();
+  const [selectedPhotoList, setSelectedPhotoList] = useState<GalleryPhoto[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [userPhotosMap, setUserPhotosMap] = useState<Record<string, string>>({});
+  const translateX = React.useRef(new Animated.Value(0)).current;
+
+  const selectedPhoto = selectedIndex !== null ? selectedPhotoList[selectedIndex] : null;
+
+  const goTo = (nextIndex: number, direction: "left" | "right") => {
+    if (nextIndex < 0 || nextIndex >= selectedPhotoList.length) return;
+    const outX = direction === "left" ? -width : width;
+    Animated.timing(translateX, { toValue: outX, duration: 180, useNativeDriver: true }).start(() => {
+      translateX.setValue(-outX);
+      setSelectedIndex(nextIndex);
+      Animated.timing(translateX, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+    });
+  };
+
+  const openPhoto = (photos: GalleryPhoto[], idx: number) => {
+    translateX.setValue(0);
+    setSelectedPhotoList(photos);
+    setSelectedIndex(idx);
+  };
+
+  const closePhoto = () => {
+    setSelectedIndex(null);
+    setSelectedPhotoList([]);
+  };
 
   useEffect(() => {
     AsyncStorage.getItem("@App:users")
@@ -80,7 +109,28 @@ export default function GaleriasScreen() {
 
   const handleLike = (photo: GalleryPhoto) => {
     if (!user) return;
+    const wasLiked = photo.likes.includes(user.email);
     toggleLike(photo.id, user.email);
+    if (!wasLiked && photo.userEmail !== user.email) {
+      sendNotification({
+        type: "photo_like",
+        fromName: user.name,
+        targetEmail: photo.userEmail,
+      }).catch(() => {});
+    }
+    // Update local list so modal reflects change immediately
+    setSelectedPhotoList((prev) =>
+      prev.map((p) => {
+        if (p.id !== photo.id) return p;
+        const liked = p.likes.includes(user.email);
+        return {
+          ...p,
+          likes: liked
+            ? p.likes.filter((e) => e !== user.email)
+            : [...p.likes, user.email],
+        };
+      })
+    );
   };
 
   const timeLeft = (photo: GalleryPhoto) => {
@@ -174,7 +224,7 @@ export default function GaleriasScreen() {
 
               {/* Grid de fotos do usuário */}
               <View style={styles.photoGrid}>
-                {group.photos.map((photo) => {
+                {group.photos.map((photo, idx) => {
                   const liked = user
                     ? photo.likes.includes(user.email)
                     : false;
@@ -183,7 +233,7 @@ export default function GaleriasScreen() {
                       key={photo.id}
                       style={styles.photoItem}
                       activeOpacity={0.88}
-                      onPress={() => setSelectedPhoto(photo)}
+                      onPress={() => openPhoto(group.photos, idx)}
                     >
                       <Image
                         source={{ uri: photo.imageUri }}
@@ -222,27 +272,70 @@ export default function GaleriasScreen() {
         />
       )}
 
-      {/* Modal de foto ampliada */}
+      {/* Modal de foto ampliada com swipe */}
       {selectedPhoto && (
         <Modal
-          visible={!!selectedPhoto}
+          visible={selectedIndex !== null}
           transparent
           animationType="fade"
-          onRequestClose={() => setSelectedPhoto(null)}
+          onRequestClose={closePhoto}
         >
           <View style={styles.modalBg}>
-            <TouchableOpacity
-              style={styles.modalClose}
-              onPress={() => setSelectedPhoto(null)}
-            >
+            <TouchableOpacity style={styles.modalClose} onPress={closePhoto}>
               <MaterialIcons name="close" size={28} color="#FFF" />
             </TouchableOpacity>
 
-            <Image
-              source={{ uri: selectedPhoto.imageUri }}
-              style={styles.modalImage}
-              resizeMode="contain"
-            />
+            {/* Dot indicators */}
+            {selectedPhotoList.length > 1 && selectedIndex !== null && (
+              <View style={styles.dotsRow}>
+                {selectedPhotoList.map((_, i) => (
+                  <View
+                    key={i}
+                    style={[styles.dot, i === selectedIndex && styles.dotActive]}
+                  />
+                ))}
+              </View>
+            )}
+
+            <Animated.View
+              style={[styles.swipeContainer, { transform: [{ translateX }] }]}
+              {...(PanResponder.create({
+                onStartShouldSetPanResponder: () => false,
+                onMoveShouldSetPanResponder: (_, g) =>
+                  Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 10,
+                onPanResponderMove: (_, g) => { translateX.setValue(g.dx); },
+                onPanResponderRelease: (_, g) => {
+                  if (selectedIndex === null) return;
+                  if (g.dx < -50) goTo(selectedIndex + 1, "left");
+                  else if (g.dx > 50) goTo(selectedIndex - 1, "right");
+                  else Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+                },
+              }).panHandlers)}
+            >
+              <Image
+                source={{ uri: selectedPhoto.imageUri }}
+                style={styles.modalImage}
+                resizeMode="contain"
+              />
+            </Animated.View>
+
+            {/* Prev / Next arrows */}
+            {selectedIndex !== null && selectedIndex > 0 && (
+              <TouchableOpacity
+                style={styles.arrowLeft}
+                onPress={() => goTo(selectedIndex - 1, "right")}
+              >
+                <MaterialIcons name="chevron-left" size={36} color="#FFF" />
+              </TouchableOpacity>
+            )}
+            {selectedIndex !== null && selectedIndex < selectedPhotoList.length - 1 && (
+              <TouchableOpacity
+                style={styles.arrowRight}
+                onPress={() => goTo(selectedIndex + 1, "left")}
+              >
+                <MaterialIcons name="chevron-right" size={36} color="#FFF" />
+              </TouchableOpacity>
+            )}
 
             <View style={styles.modalFooter}>
               <View style={styles.modalUser}>
@@ -259,9 +352,7 @@ export default function GaleriasScreen() {
                   </View>
                 )}
                 <View>
-                  <Text style={styles.modalUserName}>
-                    {selectedPhoto.userName}
-                  </Text>
+                  <Text style={styles.modalUserName}>{selectedPhoto.userName}</Text>
                   <Text style={styles.modalExpiry}>
                     Expira em {timeLeft(selectedPhoto)}
                   </Text>
@@ -270,20 +361,7 @@ export default function GaleriasScreen() {
 
               <TouchableOpacity
                 style={styles.modalLikeBtn}
-                onPress={() => {
-                  handleLike(selectedPhoto);
-                  // Atualiza estado local
-                  setSelectedPhoto((prev) => {
-                    if (!prev || !user) return prev;
-                    const liked = prev.likes.includes(user.email);
-                    return {
-                      ...prev,
-                      likes: liked
-                        ? prev.likes.filter((e) => e !== user.email)
-                        : [...prev.likes, user.email],
-                    };
-                  });
-                }}
+                onPress={() => handleLike(selectedPhoto)}
                 disabled={!user}
               >
                 <MaterialIcons
@@ -462,6 +540,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.95)",
     justifyContent: "center",
+    overflow: "hidden",
   },
   modalClose: {
     position: "absolute",
@@ -470,7 +549,51 @@ const styles = StyleSheet.create({
     zIndex: 10,
     padding: 6,
   },
-  modalImage: { width: "100%", height: "70%" },
+  swipeContainer: {
+    width: "100%",
+    height: "70%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalImage: { width: "100%", height: "100%" },
+  dotsRow: {
+    position: "absolute",
+    top: 110,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    zIndex: 10,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.35)",
+  },
+  dotActive: {
+    backgroundColor: "#FFF",
+    width: 18,
+  },
+  arrowLeft: {
+    position: "absolute",
+    left: 12,
+    top: "50%",
+    zIndex: 10,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderRadius: 20,
+    padding: 4,
+  },
+  arrowRight: {
+    position: "absolute",
+    right: 12,
+    top: "50%",
+    zIndex: 10,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderRadius: 20,
+    padding: 4,
+  },
   modalFooter: {
     position: "absolute",
     bottom: 0,

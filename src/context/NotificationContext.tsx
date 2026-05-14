@@ -23,7 +23,8 @@ export type NotificationPayload =
   | { type: "profile_like"; fromName: string }
   | { type: "profile_dislike"; fromName: string }
   | { type: "comment_like"; fromName: string; roomId: string }
-  | { type: "comment_reply"; fromName: string; roomId: string };
+  | { type: "comment_reply"; fromName: string; roomId: string }
+  | { type: "photo_like"; fromName: string; targetEmail: string };
 
 // ── Contexto ──────────────────────────────────────────────────────────────────
 interface NotificationContextData {
@@ -83,6 +84,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
           params: { roomId: payload.roomId },
         });
         break;
+      case "photo_like":
+        router.push({
+          pathname: "/perfil",
+          params: { viewUserEmail: payload.targetEmail },
+        });
+        break;
     }
   }
 
@@ -111,6 +118,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
         return {
           title: "💬 Nova resposta no seu comentário!",
           body: `${payload.fromName} respondeu ao seu comentário.`,
+        };
+      case "photo_like":
+        return {
+          title: "📸 Sua foto foi curtida!",
+          body: `${payload.fromName} curtiu uma das suas fotos.`,
         };
     }
   }
