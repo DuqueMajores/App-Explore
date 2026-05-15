@@ -163,7 +163,7 @@ function ArticleContent({
         {user && (
           <View style={styles.swipeHint}>
             <MaterialIcons name="swipe" size={15} color="#AAA" />
-            <Text style={styles.swipeHintText}>Arraste para curtir 👉 ou ignorar 👈</Text>
+            <Text style={styles.swipeHintText}>Arraste para curtir 👈 ou ignorar 👉</Text>
           </View>
         )}
 
@@ -290,13 +290,15 @@ export default function ExploreScreen() {
     outputRange: ["-6deg", "0deg", "6deg"],
     extrapolate: "clamp",
   });
+
+  // Esquerda = curtir, direita = ignorar
   const likeOpacity = translateX.interpolate({
-    inputRange: [0, SWIPE_THRESHOLD / 2, SWIPE_THRESHOLD],
-    outputRange: [0, 0.6, 1], extrapolate: "clamp",
-  });
-  const dislikeOpacity = translateX.interpolate({
     inputRange: [-SWIPE_THRESHOLD, -SWIPE_THRESHOLD / 2, 0],
     outputRange: [1, 0.6, 0], extrapolate: "clamp",
+  });
+  const dislikeOpacity = translateX.interpolate({
+    inputRange: [0, SWIPE_THRESHOLD / 2, SWIPE_THRESHOLD],
+    outputRange: [0, 0.6, 1], extrapolate: "clamp",
   });
 
   const advance = useCallback(async (type: "like" | "dislike") => {
@@ -308,7 +310,8 @@ export default function ExploreScreen() {
       if (key) await saveReaction(key, user.email, type, { title: article.title ?? undefined, category });
     }
 
-    const toValue = type === "like" ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
+    // like = sai pela esquerda, dislike = sai pela direita
+    const toValue = type === "like" ? -SCREEN_WIDTH * 1.5 : SCREEN_WIDTH * 1.5;
     const nextIdx = currentIndex + 1;
     const hasNext = nextIdx < articles.length;
 
@@ -318,7 +321,7 @@ export default function ExploreScreen() {
       return;
     }
 
-    // Slide current out, next in from opposite side
+    // Próximo card entra pelo lado oposto ao que o atual sai
     translateXNext.setValue(type === "like" ? SCREEN_WIDTH : -SCREEN_WIDTH);
     Animated.parallel([
       Animated.timing(translateX, { toValue, duration: 280, useNativeDriver: true }),
@@ -331,6 +334,10 @@ export default function ExploreScreen() {
     });
   }, [user, article, category, currentIndex, articles.length]);
 
+  // Ref mutável para evitar stale closure dentro do panResponder
+  const advanceRef = useRef(advance);
+  advanceRef.current = advance;
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -342,8 +349,9 @@ export default function ExploreScreen() {
         translateXNext.setValue(nextVal);
       },
       onPanResponderRelease: (_, g) => {
-        if (g.dx > SWIPE_THRESHOLD) advance("like");
-        else if (g.dx < -SWIPE_THRESHOLD) advance("dislike");
+        // Esquerda = curtir, direita = ignorar
+        if (g.dx < -SWIPE_THRESHOLD) advanceRef.current("like");
+        else if (g.dx > SWIPE_THRESHOLD) advanceRef.current("dislike");
         else {
           Animated.parallel([
             Animated.spring(translateX, { toValue: 0, useNativeDriver: true, friction: 6, tension: 80 }),
@@ -381,14 +389,14 @@ export default function ExploreScreen() {
         </Animated.View>
       )}
 
-      {/* Like badge */}
+      {/* Like badge — aparece ao deslizar para a esquerda */}
       <Animated.View pointerEvents="none"
         style={[styles.swipeBadge, styles.swipeBadgeLike, { opacity: likeOpacity }]}>
         <MaterialIcons name="favorite" size={34} color="#FFF" />
         <Text style={styles.swipeBadgeText}>CURTIR</Text>
       </Animated.View>
 
-      {/* Dislike badge */}
+      {/* Dislike badge — aparece ao deslizar para a direita */}
       <Animated.View pointerEvents="none"
         style={[styles.swipeBadge, styles.swipeBadgeDislike, { opacity: dislikeOpacity }]}>
         <MaterialIcons name="heart-broken" size={34} color="#FFF" />
@@ -428,6 +436,7 @@ const styles = StyleSheet.create({
   },
   swipeBadgeLike: { left: 20, backgroundColor: "#2E7D32", borderColor: "#A5D6A7" },
   swipeBadgeDislike: { right: 20, backgroundColor: "#C62828", borderColor: "#EF9A9A" },
+  // like fica à esquerda (deslize ←), ignorar fica à direita (deslize →)
   swipeBadgeText: { color: "#FFF", fontSize: 17, fontWeight: "900", letterSpacing: 1 },
   swipeHint: {
     flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14,
