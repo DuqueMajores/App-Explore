@@ -123,6 +123,18 @@ export default function HomeScreen() {
   const [newCatLabel, setNewCatLabel] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("");
   const [editMode, setEditMode] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+
+  const ICON_OPTIONS = [
+    "🔍","🌐","📰","⭐","🔥","💡","🎯","🚀","📊","🗺️",
+    "🇧🇷","🌍","🏛️","⚖️","🧭","🗞️","📡","📢","🔔","💬",
+    "💻","📱","🤖","🧠","🔬","🧪","⚗️","🛰️","🔭","💾",
+    "📈","💰","🏦","💳","🪙","💹","🏪","📦","🤝","🏭",
+    "⚽","🏀","🎾","🏊","🚴","🥇","🏋️","⛷️","🎮","🏆",
+    "❤️","🩺","💊","🏥","🧬","🦠","🩻","🧘","🥗","🏃",
+    "🎬","🎵","🎭","📚","🖼️","🎨","📷","🎤","🎧","🎪",
+    "✈️","🚂","🚗","🚢","🌅","🏔️","🏖️","🌿","🌊","🗼",
+  ];
 
   const menuAnimation = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
@@ -517,6 +529,7 @@ export default function HomeScreen() {
           setEditMode(false);
           setNewCatLabel("");
           setNewCatIcon("");
+          setShowIconPicker(false);
         }}
       >
         <TouchableWithoutFeedback
@@ -525,6 +538,7 @@ export default function HomeScreen() {
             setEditMode(false);
             setNewCatLabel("");
             setNewCatIcon("");
+            setShowIconPicker(false);
           }}
         >
           <View style={styles.catModalOverlay} />
@@ -554,6 +568,7 @@ export default function HomeScreen() {
                   setEditMode(false);
                   setNewCatLabel("");
                   setNewCatIcon("");
+                  setShowIconPicker(false);
                 }}
                 style={styles.catModalCloseBtn}
               >
@@ -588,14 +603,16 @@ export default function HomeScreen() {
           <View style={styles.catModalAddSection}>
             <Text style={styles.catModalAddTitle}>Adicionar categoria</Text>
             <View style={styles.catModalAddRow}>
-              <TextInput
-                style={styles.catModalIconInput}
-                value={newCatIcon}
-                onChangeText={setNewCatIcon}
-                placeholder="🔍"
-                placeholderTextColor="#CCC"
-                maxLength={2}
-              />
+              {/* Botão de ícone — abre picker */}
+              <TouchableOpacity
+                style={styles.catModalIconBtn}
+                onPress={() => setShowIconPicker((v) => !v)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.catModalIconBtnText}>
+                  {newCatIcon || "🔍"}
+                </Text>
+              </TouchableOpacity>
               <TextInput
                 style={styles.catModalLabelInput}
                 value={newCatLabel}
@@ -617,6 +634,33 @@ export default function HomeScreen() {
                 <MaterialIcons name="add" size={22} color="#FFF" />
               </TouchableOpacity>
             </View>
+
+            {/* Picker de ícones */}
+            {showIconPicker && (
+              <ScrollView
+                style={styles.iconPickerScroll}
+                contentContainerStyle={styles.iconPickerGrid}
+                showsVerticalScrollIndicator={true}
+                nestedScrollEnabled={true}
+              >
+                {ICON_OPTIONS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={[
+                      styles.iconPickerItem,
+                      newCatIcon === emoji && styles.iconPickerItemActive,
+                    ]}
+                    onPress={() => {
+                      setNewCatIcon(emoji);
+                      setShowIconPicker(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.iconPickerEmoji}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
 
             {/* Restaurar padrões */}
             <TouchableOpacity
@@ -1302,16 +1346,49 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  catModalIconInput: {
+  catModalIconBtn: {
     width: 48,
     height: 48,
     backgroundColor: "#F8F9FA",
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: "#E8E8E8",
-    textAlign: "center",
+    borderColor: "#C7D2FE",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  catModalIconBtnText: {
     fontSize: 22,
-    color: "#333",
+  },
+  iconPickerScroll: {
+    maxHeight: 180,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    marginBottom: 12,
+  },
+  iconPickerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    padding: 10,
+  },
+  iconPickerItem: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+  },
+  iconPickerItemActive: {
+    borderColor: "#4169E1",
+    backgroundColor: "#EEF2FF",
+  },
+  iconPickerEmoji: {
+    fontSize: 20,
   },
   catModalLabelInput: {
     flex: 1,

@@ -58,10 +58,20 @@ function ArticleHeader({
         {!!url && (
           <TouchableOpacity
             style={articleStyles.linkRow}
-            onPress={() => Linking.openURL(url)}
+            onPress={() =>
+              router.push({
+                pathname: "/explore",
+                params: {
+                  title: title ?? "",
+                  desc: desc ?? "",
+                  image: image ?? "",
+                  url: url ?? "",
+                },
+              })
+            }
             activeOpacity={0.7}
           >
-            <MaterialIcons name="open-in-new" size={14} color="#4169E1" />
+            <MaterialIcons name="article" size={14} color="#4169E1" />
             <Text style={articleStyles.linkText}>Ler artigo completo</Text>
           </TouchableOpacity>
         )}
