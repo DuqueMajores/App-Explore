@@ -11,6 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import FloatingMenu from "../components/Floatingmenu";
 
 const PAGE_SIZE = 20;
 const TOP_LIKED_COUNT = 10;
@@ -330,6 +331,7 @@ export default function RedeScreen() {
           ) : null
         }
       />
+      <FloatingMenu currentRoute="rede" />
     </View>
   );
 }

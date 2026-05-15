@@ -21,6 +21,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../src/context/AuthContext";
 import MediaViewer, { detectMedia } from "../components/MediaViewer";
 import InfoDashboard from "../components/infodashboard";
+import FloatingMenu from "../components/Floatingmenu";
 
 type Article = {
   author?: string | null;
@@ -140,19 +141,7 @@ export default function HomeScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   // ── Menu flutuante inferior ────────────────────────────────────────────────
-  const [bottomMenuOpen, setBottomMenuOpen] = useState(false);
-  const bottomMenuAnimation = useRef(new Animated.Value(0)).current;
-
-  const toggleBottomMenu = () => {
-    const toValue = bottomMenuOpen ? 0 : 1;
-    setBottomMenuOpen(!bottomMenuOpen);
-    Animated.spring(bottomMenuAnimation, {
-      toValue,
-      useNativeDriver: true,
-      friction: 5,
-      tension: 40,
-    }).start();
-  };
+  // Gerenciado pelo componente FloatingMenu
 
   // ── Carrega categorias salvas e reações do storage ─────────────────────────
   useEffect(() => {
@@ -1005,69 +994,8 @@ export default function HomeScreen() {
         <MaterialIcons name="keyboard-arrow-up" size={24} color="#4169E1" />
       </TouchableOpacity>
 
-      {/* ── Menu flutuante inferior (sobre o botão de topo) ── */}
-      {bottomMenuOpen && (
-        <TouchableWithoutFeedback onPress={toggleBottomMenu}>
-          <View style={styles.bottomMenuOverlay} />
-        </TouchableWithoutFeedback>
-      )}
-
-      <Animated.View
-        pointerEvents={bottomMenuOpen ? "auto" : "none"}
-        style={[
-          styles.bottomExpandedMenu,
-          {
-            opacity: bottomMenuAnimation,
-            transform: [
-              {
-                translateY: bottomMenuAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => { toggleBottomMenu(); router.push("/perfil"); }}
-        >
-          <MaterialIcons name="account-circle" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Meu Perfil</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => { toggleBottomMenu(); router.push("/rede"); }}
-        >
-          <MaterialIcons name="groups" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Rede</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.menuOption}
-          onPress={() => { toggleBottomMenu(); router.push("/galeria"); }}
-        >
-          <MaterialIcons name="photo-library" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Galerias</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.menuOption, { borderBottomWidth: 0 }]}
-          onPress={() => { toggleBottomMenu(); router.push("/forum"); }}
-        >
-          <MaterialIcons name="forum" size={22} color="#4169E1" />
-          <Text style={styles.menuOptionText}>Forum</Text>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* ── Botão flutuante: menu inferior ── */}
-      <TouchableOpacity
-        style={styles.floatingMenuBtn}
-        onPress={toggleBottomMenu}
-        activeOpacity={0.7}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <MaterialIcons name={bottomMenuOpen ? "close" : "menu"} size={22} color="#4169E1" />
-      </TouchableOpacity>
+      {/* ── Menu flutuante ── */}
+      <FloatingMenu currentRoute="index" />
     </View>
   );
 }
@@ -1501,41 +1429,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 4,
     zIndex: 15,
-  },
-  floatingMenuBtn: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "rgba(255,255,255,0.35)",
-    borderWidth: 1,
-    borderColor: "rgba(65,105,225,0.25)",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    zIndex: 15,
-  },
-  bottomMenuOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 18,
-  },
-  bottomExpandedMenu: {
-    position: "absolute",
-    bottom: 80,
-    right: 20,
-    backgroundColor: "#FFF",
-    borderRadius: 15,
-    padding: 10,
-    zIndex: 20,
-    width: 200,
-    elevation: 12,
-    borderWidth: 1,
-    borderColor: "#F0F0F0",
   },
 })

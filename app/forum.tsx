@@ -10,6 +10,7 @@ import {
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useForum, ForumRoom } from "../src/context/ForumContext";
+import FloatingMenu from "../components/Floatingmenu";
 
 const TOP_ROOMS = 4;
 
@@ -192,6 +193,7 @@ export default function ForumScreen() {
           ) : null
         }
       />
+      <FloatingMenu currentRoute="forum" />
     </View>
   );
 }

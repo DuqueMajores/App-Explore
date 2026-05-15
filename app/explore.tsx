@@ -17,6 +17,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useForum } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
 import MediaViewer from "../components/MediaViewer";
+import FloatingMenu from "../components/Floatingmenu";
 
 const REACTIONS_KEY = "@App:articleReactions";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -419,6 +420,7 @@ export default function ExploreScreen() {
           <View style={[styles.progressFill, { width: `${((currentIndex + 1) / articles.length) * 100}%` }]} />
         </View>
       )}
+      <FloatingMenu currentRoute="index" />
     </View>
   );
 }
