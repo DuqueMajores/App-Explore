@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Dimensions,
   Modal,
+  ScrollView,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -18,8 +19,344 @@ import StoryRing from "../components/StoryRing";
 import FloatingMenu from "../components/Floatingmenu";
 
 const { width } = Dimensions.get("window");
-const COL = 2;
-const ITEM_SIZE = (width - 48) / COL;
+
+// Tamanho de cada foto no carrossel horizontal: mostra exatamente 3 fotos visíveis
+const PHOTO_MARGIN = 6;
+const PHOTO_SIZE = (width - 32 - PHOTO_MARGIN * 2) / 3; // 3 fotos visíveis com padding do card
+
+// ── Slide viewer full-screen ──────────────────────────────────────────────────
+interface SlideViewerProps {
+  photos: GalleryPhoto[];
+  initialIndex: number;
+  currentUserEmail?: string;
+  onClose: () => void;
+  onToggleLike: (photoId: string) => void;
+  onDelete?: (photoId: string) => void;
+  timeLeft: (photo: GalleryPhoto) => string;
+  /** Avatar/nome do dono (para galeria.tsx, onde há múltiplos usuários) */
+  ownerName?: string;
+  ownerPhoto?: string;
+}
+
+function PhotoSlideViewer({
+  photos,
+  initialIndex,
+  currentUserEmail,
+  onClose,
+  onToggleLike,
+  onDelete,
+  timeLeft,
+  ownerName,
+  ownerPhoto,
+}: SlideViewerProps) {
+  const flatRef = useRef<FlatList>(null);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  // Scroll para o índice inicial sem animação
+  useEffect(() => {
+    if (photos.length > 1) {
+      setTimeout(() => {
+        flatRef.current?.scrollToIndex({ index: initialIndex, animated: false });
+      }, 50);
+    }
+  }, []);
+
+  const current = photos[currentIndex];
+  const liked = currentUserEmail ? (current?.likes ?? []).includes(currentUserEmail) : false;
+  const isOwn = currentUserEmail === current?.userEmail;
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      setCurrentIndex(viewableItems[0].index ?? 0);
+    }
+  }, []);
+
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+
+  return (
+    <View style={slideStyles.root}>
+      {/* Botão fechar */}
+      <TouchableOpacity style={slideStyles.closeBtn} onPress={onClose}>
+        <MaterialIcons name="close" size={28} color="#FFF" />
+      </TouchableOpacity>
+
+      {/* Contador */}
+      {photos.length > 1 && (
+        <View style={slideStyles.counter}>
+          <Text style={slideStyles.counterText}>
+            {currentIndex + 1} / {photos.length}
+          </Text>
+        </View>
+      )}
+
+      {/* FlatList paginada horizontal */}
+      <FlatList
+        ref={flatRef}
+        data={photos}
+        keyExtractor={(p) => p.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={initialIndex}
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        renderItem={({ item }) => (
+          <View style={[slideStyles.slide, { width }]}>
+            <Image
+              source={{ uri: item.imageUri }}
+              style={slideStyles.slideImage}
+              resizeMode="contain"
+            />
+          </View>
+        )}
+      />
+
+      {/* Dots */}
+      {photos.length > 1 && (
+        <View style={slideStyles.dots}>
+          {photos.map((_, i) => (
+            <View
+              key={i}
+              style={[slideStyles.dot, i === currentIndex && slideStyles.dotActive]}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Footer: dono + ações */}
+      <View style={slideStyles.footer}>
+        <View style={slideStyles.userRow}>
+          {(ownerPhoto ?? current?.userPhoto) ? (
+            <Image
+              source={{ uri: ownerPhoto ?? current?.userPhoto }}
+              style={slideStyles.avatar}
+            />
+          ) : (
+            <View style={slideStyles.avatarFallback}>
+              <Text style={slideStyles.avatarInitial}>
+                {(ownerName ?? current?.userName ?? "?").charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <View>
+            <Text style={slideStyles.ownerName}>
+              {ownerName ?? current?.userName}
+            </Text>
+            <Text style={slideStyles.expiry}>
+              Expira em {timeLeft(current)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={slideStyles.actions}>
+          {isOwn && onDelete ? (
+            <TouchableOpacity
+              style={slideStyles.actionBtn}
+              onPress={() => {
+                onDelete(current.id);
+                if (photos.length <= 1) {
+                  onClose();
+                } else {
+                  const newIdx = currentIndex > 0 ? currentIndex - 1 : 0;
+                  setCurrentIndex(newIdx);
+                  flatRef.current?.scrollToIndex({ index: newIdx, animated: true });
+                }
+              }}
+            >
+              <MaterialIcons name="delete-outline" size={28} color="#FF6B6B" />
+            </TouchableOpacity>
+          ) : (
+            currentUserEmail && (
+              <TouchableOpacity
+                style={slideStyles.actionBtn}
+                onPress={() => onToggleLike(current.id)}
+              >
+                <MaterialIcons
+                  name={liked ? "favorite" : "favorite-border"}
+                  size={28}
+                  color={liked ? "#FF6B6B" : "#FFF"}
+                />
+                <Text style={slideStyles.likeCount}>
+                  {current?.likes?.length ?? 0}
+                </Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const slideStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  closeBtn: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 20,
+    padding: 6,
+  },
+  counter: {
+    position: "absolute",
+    top: 54,
+    left: 20,
+    zIndex: 20,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  counterText: { color: "#FFF", fontSize: 13, fontWeight: "700" },
+  slide: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  slideImage: {
+    width: "100%",
+    height: "100%",
+  },
+  dots: {
+    position: "absolute",
+    bottom: 120,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    zIndex: 10,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.4)",
+  },
+  dotActive: {
+    backgroundColor: "#FFF",
+    width: 18,
+  },
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    paddingBottom: 44,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    zIndex: 10,
+  },
+  userRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: { width: 42, height: 42, borderRadius: 21, borderWidth: 2, borderColor: "#FFF" },
+  avatarFallback: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#4169E1",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarInitial: { color: "#FFF", fontWeight: "700", fontSize: 18 },
+  ownerName: { color: "#FFF", fontWeight: "700", fontSize: 15 },
+  expiry: { color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 2 },
+  actions: { flexDirection: "row", gap: 16 },
+  actionBtn: { alignItems: "center", gap: 4 },
+  likeCount: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+});
+
+// ── Carrossel de fotos por grupo ──────────────────────────────────────────────
+function PhotoCarousel({
+  photos,
+  userEmail,
+  currentUserEmail,
+  onSelect,
+  timeLeft,
+}: {
+  photos: GalleryPhoto[];
+  userEmail: string;
+  currentUserEmail?: string;
+  onSelect: (photo: GalleryPhoto, index: number) => void;
+  timeLeft: (photo: GalleryPhoto) => string;
+}) {
+  const [atStart, setAtStart] = useState(true);
+  const hasMore = photos.length > 3;
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      scrollEnabled={hasMore}
+      contentContainerStyle={styles.photoRow}
+      style={styles.photoScrollView}
+      onScroll={(e) => {
+        setAtStart(e.nativeEvent.contentOffset.x < 10);
+      }}
+      scrollEventThrottle={16}
+    >
+      {photos.map((photo, index) => {
+        const liked = currentUserEmail
+          ? photo.likes.includes(currentUserEmail)
+          : false;
+        const isThirdAndAtStart = hasMore && index === 2 && atStart;
+
+        return (
+          <TouchableOpacity
+            key={photo.id}
+            style={styles.photoItem}
+            activeOpacity={0.88}
+            onPress={() => onSelect(photo, index)}
+          >
+            <Image
+              source={{ uri: photo.imageUri }}
+              style={styles.photoImage}
+              resizeMode="cover"
+            />
+            {/* Overlay com likes e tempo */}
+            <View style={styles.photoOverlay}>
+              <View style={styles.photoMeta}>
+                <MaterialIcons
+                  name={liked ? "favorite" : "favorite-border"}
+                  size={14}
+                  color={liked ? "#FF6B6B" : "#FFF"}
+                />
+                <Text style={styles.photoLikes}>{photo.likes.length}</Text>
+              </View>
+              <View style={styles.photoTime}>
+                <MaterialIcons
+                  name="access-time"
+                  size={11}
+                  color="rgba(255,255,255,0.8)"
+                />
+                <Text style={styles.photoTimeText}>{timeLeft(photo)}</Text>
+              </View>
+            </View>
+            {/* Indicador "+N" apenas na 3ª foto quando está no início */}
+            {isThirdAndAtStart && (
+              <View style={styles.moreIndicator}>
+                <Text style={styles.moreIndicatorText}>
+                  +{photos.length - 3}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
 // Agrupa fotos por usuário, cada grupo ordenado por likes
 interface UserGroup {
@@ -33,7 +370,12 @@ interface UserGroup {
 export default function GaleriasScreen() {
   const { getActivePhotos, toggleLike } = useGallery();
   const { user } = useAuth();
-  const [selectedPhoto, setSelectedPhoto] = useState<GalleryPhoto | null>(null);
+  const [slideState, setSlideState] = useState<{
+    photos: GalleryPhoto[];
+    index: number;
+    ownerName: string;
+    ownerPhoto?: string;
+  } | null>(null);
   const [userPhotosMap, setUserPhotosMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -74,10 +416,10 @@ export default function GaleriasScreen() {
 
   const isEmpty = activePhotos.length === 0;
 
-  const handleLike = (photo: GalleryPhoto) => {
+  const handleToggleLike = useCallback((photoId: string) => {
     if (!user) return;
-    toggleLike(photo.id, user.email);
-  };
+    toggleLike(photoId, user.email);
+  }, [user, toggleLike]);
 
   const timeLeft = (photo: GalleryPhoto) => {
     const diff = new Date(photo.expiresAt).getTime() - Date.now();
@@ -168,141 +510,46 @@ export default function GaleriasScreen() {
                 <MaterialIcons name="chevron-right" size={20} color="#CCC" />
               </View>
 
-              {/* Grid de fotos do usuário */}
-              <View style={styles.photoGrid}>
-                {group.photos.map((photo) => {
-                  const liked = user
-                    ? photo.likes.includes(user.email)
-                    : false;
-                  return (
-                    <TouchableOpacity
-                      key={photo.id}
-                      style={styles.photoItem}
-                      activeOpacity={0.88}
-                      onPress={() => setSelectedPhoto(photo)}
-                    >
-                      <Image
-                        source={{ uri: photo.imageUri }}
-                        style={styles.photoImage}
-                        resizeMode="cover"
-                      />
-                      {/* Overlay com likes e tempo */}
-                      <View style={styles.photoOverlay}>
-                        <View style={styles.photoMeta}>
-                          <MaterialIcons
-                            name={liked ? "favorite" : "favorite-border"}
-                            size={14}
-                            color={liked ? "#FF6B6B" : "#FFF"}
-                          />
-                          <Text style={styles.photoLikes}>
-                            {photo.likes.length}
-                          </Text>
-                        </View>
-                        <View style={styles.photoTime}>
-                          <MaterialIcons
-                            name="access-time"
-                            size={11}
-                            color="rgba(255,255,255,0.8)"
-                          />
-                          <Text style={styles.photoTimeText}>
-                            {timeLeft(photo)}
-                          </Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {/* Carrossel horizontal de fotos */}
+              <PhotoCarousel
+                photos={group.photos}
+                userEmail={group.userEmail}
+                currentUserEmail={user?.email}
+                onSelect={(photo, index) =>
+                  setSlideState({
+                    photos: group.photos,
+                    index,
+                    ownerName: group.userName,
+                    ownerPhoto: userPhotosMap[group.userEmail] ?? group.userPhoto,
+                  })
+                }
+                timeLeft={timeLeft}
+              />
             </View>
           )}
         />
       )}
 
-      {/* Modal de foto ampliada */}
-      {selectedPhoto && (
-        <Modal
-          visible={!!selectedPhoto}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setSelectedPhoto(null)}
-        >
-          <View style={styles.modalBg}>
-            <TouchableOpacity
-              style={styles.modalClose}
-              onPress={() => setSelectedPhoto(null)}
-            >
-              <MaterialIcons name="close" size={28} color="#FFF" />
-            </TouchableOpacity>
-
-            <Image
-              source={{ uri: selectedPhoto.imageUri }}
-              style={styles.modalImage}
-              resizeMode="contain"
-            />
-
-            <View style={styles.modalFooter}>
-              <View style={styles.modalUser}>
-                {(userPhotosMap[selectedPhoto.userEmail] ?? selectedPhoto.userPhoto) ? (
-                  <Image
-                    source={{ uri: userPhotosMap[selectedPhoto.userEmail] ?? selectedPhoto.userPhoto }}
-                    style={styles.modalAvatar}
-                  />
-                ) : (
-                  <View style={styles.modalAvatarFallback}>
-                    <Text style={styles.modalAvatarText}>
-                      {selectedPhoto.userName.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <View>
-                  <Text style={styles.modalUserName}>
-                    {selectedPhoto.userName}
-                  </Text>
-                  <Text style={styles.modalExpiry}>
-                    Expira em {timeLeft(selectedPhoto)}
-                  </Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={styles.modalLikeBtn}
-                onPress={() => {
-                  handleLike(selectedPhoto);
-                  // Atualiza estado local
-                  setSelectedPhoto((prev) => {
-                    if (!prev || !user) return prev;
-                    const liked = prev.likes.includes(user.email);
-                    return {
-                      ...prev,
-                      likes: liked
-                        ? prev.likes.filter((e) => e !== user.email)
-                        : [...prev.likes, user.email],
-                    };
-                  });
-                }}
-                disabled={!user}
-              >
-                <MaterialIcons
-                  name={
-                    user && selectedPhoto.likes.includes(user.email)
-                      ? "favorite"
-                      : "favorite-border"
-                  }
-                  size={30}
-                  color={
-                    user && selectedPhoto.likes.includes(user.email)
-                      ? "#FF6B6B"
-                      : "#FFF"
-                  }
-                />
-                <Text style={styles.modalLikeCount}>
-                  {selectedPhoto.likes.length}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
+      {/* Slide viewer */}
+      <Modal
+        visible={!!slideState}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setSlideState(null)}
+      >
+        {slideState && (
+          <PhotoSlideViewer
+            photos={slideState.photos}
+            initialIndex={slideState.index}
+            currentUserEmail={user?.email}
+            onClose={() => setSlideState(null)}
+            onToggleLike={handleToggleLike}
+            timeLeft={timeLeft}
+            ownerName={slideState.ownerName}
+            ownerPhoto={slideState.ownerPhoto}
+          />
+        )}
+      </Modal>
       <FloatingMenu currentRoute="galeria" />
     </View>
   );
@@ -353,13 +600,20 @@ const styles = StyleSheet.create({
   groupName: { fontSize: 15, fontWeight: "700", color: "#212529" },
   groupMeta: { fontSize: 12, color: "#999", marginTop: 2 },
 
-  photoGrid: {
+  photoScrollView: {
+    // sem overflow clip para não cortar sombras
+  },
+  photoRow: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: PHOTO_MARGIN,
     flexDirection: "row",
-    flexWrap: "wrap",
   },
   photoItem: {
-    width: ITEM_SIZE,
-    height: ITEM_SIZE,
+    width: PHOTO_SIZE,
+    height: PHOTO_SIZE,
+    borderRadius: 12,
+    overflow: "hidden",
     position: "relative",
   },
   photoImage: { width: "100%", height: "100%" },
@@ -454,46 +708,22 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Modal
-  modalBg: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.95)",
-    justifyContent: "center",
-  },
-  modalClose: {
+
+  // Indicador "+N fotos" na 3ª foto quando há mais de 3
+  moreIndicator: {
     position: "absolute",
-    top: 50,
-    right: 20,
-    zIndex: 10,
-    padding: 6,
-  },
-  modalImage: { width: "100%", height: "70%" },
-  modalFooter: {
-    position: "absolute",
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    paddingBottom: 40,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalUser: { flexDirection: "row", alignItems: "center", gap: 12 },
-  modalAvatar: { width: 42, height: 42, borderRadius: 21, borderWidth: 2, borderColor: "#FFF" },
-  modalAvatarFallback: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#4169E1",
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
   },
-  modalAvatarText: { color: "#FFF", fontWeight: "700", fontSize: 18 },
-  modalUserName: { color: "#FFF", fontWeight: "700", fontSize: 15 },
-  modalExpiry: { color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 2 },
-  modalLikeBtn: { alignItems: "center", gap: 4 },
-  modalLikeCount: { color: "#FFF", fontWeight: "700", fontSize: 14 },
+  moreIndicatorText: {
+    color: "#FFF",
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
 });

@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { useAuth } from "../src/context/AuthContext";
 import { useGallery, GalleryPhoto } from "../src/context/GalleryContex";
+import { useForum, ForumRoom, ForumComment } from "../src/context/ForumContext";
 import StoryRing from "../components/StoryRing";
 import FloatingMenu from "../components/Floatingmenu";
 
@@ -37,6 +38,220 @@ interface PublicUser {
   dislikes: string[];
 }
 
+// ── Slide viewer full-screen (reutilizável) ────────────────────────────────────
+interface SlideViewerProps {
+  photos: GalleryPhoto[];
+  initialIndex: number;
+  currentUserEmail?: string;
+  onClose: () => void;
+  onToggleLike: (photoId: string) => void;
+  onDelete?: (photoId: string) => void;
+  timeLeft: (photo: GalleryPhoto) => string;
+  ownerName?: string;
+  ownerPhoto?: string;
+}
+
+function PhotoSlideViewer({
+  photos,
+  initialIndex,
+  currentUserEmail,
+  onClose,
+  onToggleLike,
+  onDelete,
+  timeLeft,
+  ownerName,
+  ownerPhoto,
+}: SlideViewerProps) {
+  const flatRef = useRef<FlatList>(null);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const { width: screenWidth } = Dimensions.get("window");
+
+  useEffect(() => {
+    if (photos.length > 1) {
+      setTimeout(() => {
+        flatRef.current?.scrollToIndex({ index: initialIndex, animated: false });
+      }, 50);
+    }
+  }, []);
+
+  const current = photos[currentIndex];
+  const liked = currentUserEmail ? (current?.likes ?? []).includes(currentUserEmail) : false;
+  const isOwn = currentUserEmail === current?.userEmail;
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) setCurrentIndex(viewableItems[0].index ?? 0);
+  }, []);
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+
+  return (
+    <View style={slideStyles.root}>
+      <TouchableOpacity style={slideStyles.closeBtn} onPress={onClose}>
+        <MaterialIcons name="close" size={28} color="#FFF" />
+      </TouchableOpacity>
+
+      {photos.length > 1 && (
+        <View style={slideStyles.counter}>
+          <Text style={slideStyles.counterText}>
+            {currentIndex + 1} / {photos.length}
+          </Text>
+        </View>
+      )}
+
+      <FlatList
+        ref={flatRef}
+        data={photos}
+        keyExtractor={(p) => p.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={initialIndex}
+        getItemLayout={(_, index) => ({
+          length: screenWidth,
+          offset: screenWidth * index,
+          index,
+        })}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        renderItem={({ item }) => (
+          <View style={[slideStyles.slide, { width: screenWidth }]}>
+            <Image
+              source={{ uri: item.imageUri }}
+              style={slideStyles.slideImage}
+              resizeMode="contain"
+            />
+          </View>
+        )}
+      />
+
+      {photos.length > 1 && (
+        <View style={slideStyles.dots}>
+          {photos.map((_, i) => (
+            <View
+              key={i}
+              style={[slideStyles.dot, i === currentIndex && slideStyles.dotActive]}
+            />
+          ))}
+        </View>
+      )}
+
+      <View style={slideStyles.footer}>
+        <View style={slideStyles.userRow}>
+          {(ownerPhoto ?? current?.userPhoto) ? (
+            <Image
+              source={{ uri: ownerPhoto ?? current?.userPhoto }}
+              style={slideStyles.avatar}
+            />
+          ) : (
+            <View style={slideStyles.avatarFallback}>
+              <Text style={slideStyles.avatarInitial}>
+                {(ownerName ?? current?.userName ?? "?").charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <View>
+            <Text style={slideStyles.ownerName}>{ownerName ?? current?.userName}</Text>
+            <Text style={slideStyles.expiry}>Expira em {timeLeft(current)}</Text>
+          </View>
+        </View>
+
+        <View style={slideStyles.actions}>
+          {isOwn && onDelete ? (
+            <TouchableOpacity
+              style={slideStyles.actionBtn}
+              onPress={() => {
+                onDelete(current.id);
+                if (photos.length <= 1) {
+                  onClose();
+                } else {
+                  const newIdx = currentIndex > 0 ? currentIndex - 1 : 0;
+                  setCurrentIndex(newIdx);
+                  flatRef.current?.scrollToIndex({ index: newIdx, animated: true });
+                }
+              }}
+            >
+              <MaterialIcons name="delete-outline" size={28} color="#FF6B6B" />
+            </TouchableOpacity>
+          ) : (
+            currentUserEmail && (
+              <TouchableOpacity
+                style={slideStyles.actionBtn}
+                onPress={() => onToggleLike(current.id)}
+              >
+                <MaterialIcons
+                  name={liked ? "favorite" : "favorite-border"}
+                  size={28}
+                  color={liked ? "#FF6B6B" : "#FFF"}
+                />
+                <Text style={slideStyles.likeCount}>{current?.likes?.length ?? 0}</Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const slideStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#000" },
+  closeBtn: { position: "absolute", top: 50, right: 20, zIndex: 20, padding: 6 },
+  counter: {
+    position: "absolute",
+    top: 54,
+    left: 20,
+    zIndex: 20,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  counterText: { color: "#FFF", fontSize: 13, fontWeight: "700" },
+  slide: { flex: 1, justifyContent: "center", alignItems: "center" },
+  slideImage: { width: "100%", height: "100%" },
+  dots: {
+    position: "absolute",
+    bottom: 120,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    zIndex: 10,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.4)" },
+  dotActive: { backgroundColor: "#FFF", width: 18 },
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    paddingBottom: 44,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    zIndex: 10,
+  },
+  userRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: { width: 42, height: 42, borderRadius: 21, borderWidth: 2, borderColor: "#FFF" },
+  avatarFallback: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#4169E1",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarInitial: { color: "#FFF", fontWeight: "700", fontSize: 18 },
+  ownerName: { color: "#FFF", fontWeight: "700", fontSize: 15 },
+  expiry: { color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 2 },
+  actions: { flexDirection: "row", gap: 16 },
+  actionBtn: { alignItems: "center", gap: 4 },
+  likeCount: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+});
+
 // ── Mini-galeria no perfil ─────────────────────────────────────────────────────
 function ProfileGallery({
   userEmail,
@@ -46,7 +261,7 @@ function ProfileGallery({
   currentUserEmail?: string;
 }) {
   const { getPhotosByUser, toggleLike, deletePhoto } = useGallery();
-  const [selected, setSelected] = useState<GalleryPhoto | null>(null);
+  const [slideIndex, setSlideIndex] = useState<number | null>(null);
   const photos = getPhotosByUser(userEmail);
 
   const timeLeft = (photo: GalleryPhoto) => {
@@ -56,6 +271,15 @@ function ProfileGallery({
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
   };
+
+  const handleToggleLike = useCallback((photoId: string) => {
+    if (!currentUserEmail) return;
+    toggleLike(photoId, currentUserEmail);
+  }, [currentUserEmail, toggleLike]);
+
+  const handleDelete = useCallback((photoId: string) => {
+    deletePhoto(photoId);
+  }, [deletePhoto]);
 
   return (
     <View style={galStyles.card}>
@@ -76,32 +300,32 @@ function ProfileGallery({
         </View>
       ) : (
         <View style={galStyles.grid}>
-          {photos.map((photo) => {
+          {photos.slice(0, 9).map((photo, index) => {
             const liked = currentUserEmail
               ? photo.likes.includes(currentUserEmail)
               : false;
+            const isNinthWithMore = index === 8 && photos.length > 9;
             return (
               <TouchableOpacity
                 key={photo.id}
                 style={galStyles.thumb}
                 activeOpacity={0.85}
-                onPress={() => setSelected(photo)}
+                onPress={() => setSlideIndex(index)}
               >
                 <Image
                   source={{ uri: photo.imageUri }}
                   style={galStyles.thumbImg}
                   resizeMode="cover"
                 />
-                {photo.likes.length > 0 && (
+                {photo.likes.length > 0 && !isNinthWithMore && (
                   <View style={galStyles.thumbBadge}>
-                    <MaterialIcons
-                      name="favorite"
-                      size={10}
-                      color="#FF6B6B"
-                    />
-                    <Text style={galStyles.thumbLikes}>
-                      {photo.likes.length}
-                    </Text>
+                    <MaterialIcons name="favorite" size={10} color="#FF6B6B" />
+                    <Text style={galStyles.thumbLikes}>{photo.likes.length}</Text>
+                  </View>
+                )}
+                {isNinthWithMore && (
+                  <View style={galStyles.moreOverlay}>
+                    <Text style={galStyles.moreOverlayText}>+{photos.length - 9}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -110,88 +334,25 @@ function ProfileGallery({
         </View>
       )}
 
-      {/* Modal de foto ampliada */}
-      {selected && (
-        <Modal
-          visible={!!selected}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setSelected(null)}
-        >
-          <View style={galStyles.modalBg}>
-            <TouchableOpacity
-              style={galStyles.modalClose}
-              onPress={() => setSelected(null)}
-            >
-              <MaterialIcons name="close" size={28} color="#FFF" />
-            </TouchableOpacity>
-            <Image
-              source={{ uri: selected.imageUri }}
-              style={galStyles.modalImg}
-              resizeMode="contain"
-            />
-            <View style={galStyles.modalFooter}>
-              <Text style={galStyles.modalExpiry}>
-                Expira em {timeLeft(selected)}
-              </Text>
-              <View style={galStyles.modalActions}>
-                {currentUserEmail && currentUserEmail !== selected.userEmail ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      toggleLike(selected.id, currentUserEmail!);
-                      setSelected((prev) => {
-                        if (!prev || !currentUserEmail) return prev;
-                        const liked = prev.likes.includes(currentUserEmail);
-                        return {
-                          ...prev,
-                          likes: liked
-                            ? prev.likes.filter((e) => e !== currentUserEmail)
-                            : [...prev.likes, currentUserEmail],
-                        };
-                      });
-                    }}
-                    style={galStyles.modalActionBtn}
-                  >
-                    <MaterialIcons
-                      name={
-                        currentUserEmail &&
-                        selected.likes.includes(currentUserEmail)
-                          ? "favorite"
-                          : "favorite-border"
-                      }
-                      size={28}
-                      color={
-                        currentUserEmail &&
-                        selected.likes.includes(currentUserEmail)
-                          ? "#FF6B6B"
-                          : "#FFF"
-                      }
-                    />
-                    <Text style={galStyles.modalLikeCount}>
-                      {selected.likes.length}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {currentUserEmail === selected.userEmail && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      deletePhoto(selected.id);
-                      setSelected(null);
-                    }}
-                    style={galStyles.modalActionBtn}
-                  >
-                    <MaterialIcons
-                      name="delete-outline"
-                      size={28}
-                      color="#FF6B6B"
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
+      {/* Slide viewer */}
+      <Modal
+        visible={slideIndex !== null}
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setSlideIndex(null)}
+      >
+        {slideIndex !== null && (
+          <PhotoSlideViewer
+            photos={photos}
+            initialIndex={slideIndex}
+            currentUserEmail={currentUserEmail}
+            onClose={() => setSlideIndex(null)}
+            onToggleLike={handleToggleLike}
+            onDelete={currentUserEmail === userEmail ? handleDelete : undefined}
+            timeLeft={timeLeft}
+          />
+        )}
+      </Modal>
     </View>
   );
 }
@@ -241,36 +402,254 @@ const galStyles = StyleSheet.create({
     borderRadius: 10,
   },
   thumbLikes: { color: "#FFF", fontSize: 10, fontWeight: "700" },
-  modalBg: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.95)",
+  moreOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.52)",
     justifyContent: "center",
-  },
-  modalClose: {
-    position: "absolute",
-    top: 50,
-    right: 20,
-    zIndex: 10,
-    padding: 6,
-  },
-  modalImg: { width: "100%", height: "70%" },
-  modalFooter: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    paddingBottom: 40,
-    backgroundColor: "rgba(0,0,0,0.5)",
   },
-  modalExpiry: { color: "rgba(255,255,255,0.7)", fontSize: 13 },
-  modalActions: { flexDirection: "row", gap: 16 },
-  modalActionBtn: { alignItems: "center", gap: 4 },
-  modalLikeCount: { color: "#FFF", fontWeight: "700", fontSize: 13 },
+  moreOverlayText: {
+    color: "#FFF",
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+});
+
+// ── Card de comentários do usuário no fórum ───────────────────────────────────
+interface UserCommentEntry {
+  comment: ForumComment;
+  room: ForumRoom;
+}
+
+function UserCommentsCard({ userEmail }: { userEmail: string }) {
+  const { rooms } = useForum();
+  const [expanded, setExpanded] = useState(false);
+
+  const entries: UserCommentEntry[] = React.useMemo(() => {
+    const result: UserCommentEntry[] = [];
+    for (const room of rooms) {
+      for (const comment of room.comments) {
+        if (comment.userEmail === userEmail) {
+          result.push({ comment, room });
+        }
+      }
+    }
+    return result.sort(
+      (a, b) =>
+        new Date(b.comment.createdAt).getTime() -
+        new Date(a.comment.createdAt).getTime()
+    );
+  }, [rooms, userEmail]);
+
+  const count = entries.length;
+
+  return (
+    <>
+      {/* Card clicável */}
+      <TouchableOpacity
+        style={cmtStyles.card}
+        activeOpacity={0.75}
+        onPress={() => setExpanded(true)}
+      >
+        <View style={cmtStyles.iconWrap}>
+          <MaterialIcons name="forum" size={22} color="#4169E1" />
+        </View>
+        <View style={cmtStyles.textWrap}>
+          <Text style={cmtStyles.title}>Comentários no Fórum</Text>
+          <Text style={cmtStyles.sub}>
+            {count === 0
+              ? "Nenhum comentário ainda"
+              : `${count} comentário${count !== 1 ? "s" : ""} em ${
+                  new Set(entries.map((e) => e.room.id)).size
+                } sala${new Set(entries.map((e) => e.room.id)).size !== 1 ? "s" : ""}`}
+          </Text>
+        </View>
+        <MaterialIcons name="chevron-right" size={22} color="#CCC" />
+      </TouchableOpacity>
+
+      {/* Modal com lista de comentários */}
+      <Modal
+        visible={expanded}
+        animationType="slide"
+        onRequestClose={() => setExpanded(false)}
+      >
+        <View style={cmtStyles.modalRoot}>
+          {/* Header do modal */}
+          <View style={cmtStyles.modalHeader}>
+            <TouchableOpacity
+              onPress={() => setExpanded(false)}
+              style={cmtStyles.modalBackBtn}
+            >
+              <MaterialIcons name="arrow-back" size={24} color="#212529" />
+            </TouchableOpacity>
+            <Text style={cmtStyles.modalTitle}>Comentários no Fórum</Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          {count === 0 ? (
+            <View style={cmtStyles.empty}>
+              <MaterialIcons name="chat-bubble-outline" size={52} color="#DDD" />
+              <Text style={cmtStyles.emptyText}>Nenhum comentário ainda</Text>
+              <Text style={cmtStyles.emptySub}>
+                Participe de uma sala de fórum para ver seus comentários aqui.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={entries}
+              keyExtractor={(e) => e.comment.id}
+              contentContainerStyle={cmtStyles.listContent}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={cmtStyles.commentCard}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setExpanded(false);
+                    router.push({
+                      pathname: "/forum-room",
+                      params: { roomId: item.room.id },
+                    });
+                  }}
+                >
+                  {/* Sala de origem */}
+                  <View style={cmtStyles.roomRow}>
+                    <MaterialIcons name="forum" size={13} color="#4169E1" />
+                    <Text style={cmtStyles.roomTitle} numberOfLines={1}>
+                      {item.room.articleTitle}
+                    </Text>
+                  </View>
+
+                  {/* Texto do comentário */}
+                  <Text style={cmtStyles.commentText} numberOfLines={4}>
+                    {item.comment.text}
+                  </Text>
+
+                  {/* Rodapé: data + likes */}
+                  <View style={cmtStyles.commentFooter}>
+                    <Text style={cmtStyles.commentDate}>
+                      {new Date(item.comment.createdAt).toLocaleDateString(
+                        "pt-BR"
+                      )}{" "}
+                      {new Date(item.comment.createdAt).toLocaleTimeString(
+                        "pt-BR",
+                        { hour: "2-digit", minute: "2-digit" }
+                      )}
+                    </Text>
+                    {item.comment.likes.length > 0 && (
+                      <View style={cmtStyles.likeRow}>
+                        <MaterialIcons
+                          name="favorite"
+                          size={13}
+                          color="#E63946"
+                        />
+                        <Text style={cmtStyles.likeCount}>
+                          {item.comment.likes.length}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+const cmtStyles = StyleSheet.create({
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 16,
+    elevation: 1,
+    gap: 14,
+  },
+  iconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#EEF2FF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  textWrap: { flex: 1 },
+  title: { fontSize: 15, fontWeight: "700", color: "#212529", marginBottom: 2 },
+  sub: { fontSize: 12, color: "#999" },
+  modalRoot: { flex: 1, backgroundColor: "#F8F9FA" },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+    backgroundColor: "#FFF",
+    elevation: 2,
+  },
+  modalBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#F8F9FA",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalTitle: { fontSize: 18, fontWeight: "800", color: "#212529" },
+  listContent: { padding: 16, gap: 12 },
+  commentCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 14,
+    elevation: 2,
+    borderLeftWidth: 3,
+    borderLeftColor: "#4169E1",
+  },
+  roomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 8,
+  },
+  roomTitle: {
+    fontSize: 12,
+    color: "#4169E1",
+    fontWeight: "600",
+    flex: 1,
+  },
+  commentText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#333",
+    marginBottom: 10,
+  },
+  commentFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  commentDate: { fontSize: 11, color: "#BBB" },
+  likeRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  likeCount: { fontSize: 12, fontWeight: "700", color: "#E63946" },
+  empty: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  emptyText: { fontSize: 18, fontWeight: "700", color: "#999" },
+  emptySub: {
+    fontSize: 13,
+    color: "#BBB",
+    textAlign: "center",
+    lineHeight: 20,
+  },
 });
 
 // ── Perfil de outro usuário ───────────────────────────────────────────────────
@@ -410,6 +789,11 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
         userEmail={target.email}
         currentUserEmail={loggedUser?.email}
       />
+
+      {/* Comentários no fórum */}
+      <View style={styles.infoSection}>
+        <UserCommentsCard userEmail={target.email} />
+      </View>
 
       {/* Info card */}
       <View style={styles.infoSection}>
@@ -687,6 +1071,11 @@ export default function ProfileScreen() {
         userEmail={user.email}
         currentUserEmail={user.email}
       />
+
+      {/* ── Comentários no fórum ── */}
+      <View style={styles.infoSection}>
+        <UserCommentsCard userEmail={user.email} />
+      </View>
 
       {/* ── Info Section ── */}
       <View style={styles.infoSection}>
