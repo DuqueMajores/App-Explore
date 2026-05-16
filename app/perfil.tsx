@@ -1387,7 +1387,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   loginButtonText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
-  infoSection: { paddingHorizontal: 20, marginTop: 0, gap: 12 },
+  infoSection: { paddingHorizontal: 20, marginTop: 0, gap: 12, marginBottom: 12 },
   infoCard: {
     flexDirection: "row",
     backgroundColor: "#FFF",
