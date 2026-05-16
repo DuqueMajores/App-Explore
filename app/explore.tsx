@@ -20,8 +20,8 @@ import MediaViewer from "../components/MediaViewer";
 import FloatingMenu from "../components/Floatingmenu";
 
 const REACTIONS_KEY = "@App:articleReactions";
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const SWIPE_THRESHOLD = 100;
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const SWIPE_THRESHOLD = 80;
 
 const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY ?? "";
 const GROQ_MODEL = "llama-3.1-8b-instant";
@@ -97,14 +97,17 @@ async function saveReaction(
   }
 }
 
+// ── ArticleContent ─────────────────────────────────────────────────────────────
 function ArticleContent({
   article,
   existingRoomId,
   onForumPress,
+  onDebateVote,
 }: {
   article: Article;
   existingRoomId?: string;
   onForumPress: () => void;
+  onDebateVote: (type: "like" | "dislike") => void;
 }) {
   const articleUrl = article.url ?? "";
   const imageUrl = article.urlToImage ?? "https://via.placeholder.com/400x200";
@@ -115,6 +118,8 @@ function ArticleContent({
   const [debateContent, setDebateContent] = useState<{ favor: string; contra: string } | null>(null);
   const [loadingDebate, setLoadingDebate] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "debate" | null>(null);
+  // Tracks which debate side the user voted on for this article instance
+  const [debateVote, setDebateVote] = useState<"like" | "dislike" | null>(null);
 
   const handleAiSummary = async () => {
     if (aiSummary) { setActiveTab("summary"); return; }
@@ -135,6 +140,7 @@ function ArticleContent({
   const handleDebate = async () => {
     if (loadingDebate) return;
     setDebateContent(null);
+    setDebateVote(null);
     setLoadingDebate(true);
     setActiveTab("debate");
     try {
@@ -150,8 +156,26 @@ function ArticleContent({
     }
   };
 
+  // Called when user taps the thumbs-up on a debate side
+  const handleDebateVote = (type: "like" | "dislike") => {
+    if (!user) return;
+    // Toggle off if already voted the same
+    if (debateVote === type) {
+      setDebateVote(null);
+      // We don't undo the reaction in the index — toggling just clears the visual
+      return;
+    }
+    setDebateVote(type);
+    onDebateVote(type);
+  };
+
   return (
-    <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.scrollView}
+      showsVerticalScrollIndicator={false}
+      // Prevent the inner scroll from stealing the parent pan gesture
+      scrollEventThrottle={16}
+    >
       <MediaViewer imageUrl={imageUrl} articleUrl={articleUrl} height={300} showBadge autoPlay={false} />
       <View style={styles.content}>
         <Text style={styles.sourceBadge}>{article.source?.name || "Fonte"}</Text>
@@ -160,13 +184,6 @@ function ArticleContent({
           <View style={styles.authorAvatar} />
           <Text style={styles.authorName}>Por {article.author || "Redacao"}</Text>
         </View>
-
-        {user && (
-          <View style={styles.swipeHint}>
-            <MaterialIcons name="swipe" size={15} color="#AAA" />
-            <Text style={styles.swipeHintText}>Arraste para curtir 👈 ou ignorar 👉</Text>
-          </View>
-        )}
 
         <View style={styles.divider} />
 
@@ -206,27 +223,88 @@ function ArticleContent({
 
         {activeTab === "debate" && (
           <View style={{ gap: 12, marginBottom: 20 }}>
+            {/* ── Painel A FAVOR ── */}
             <View style={[styles.aiPanel, styles.aiPanelFavor]}>
               <View style={styles.aiPanelHeader}>
                 <MaterialIcons name="thumb-up" size={16} color="#2E7D32" />
                 <Text style={[styles.aiPanelTitle, { color: "#2E7D32" }]}>A favor</Text>
-                <TouchableOpacity onPress={handleDebate} disabled={loadingDebate} style={styles.refreshButton}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <TouchableOpacity
+                  onPress={handleDebate}
+                  disabled={loadingDebate}
+                  style={styles.refreshButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
                   <MaterialIcons name="refresh" size={16} color="#2E7D32" />
                 </TouchableOpacity>
               </View>
+
               {loadingDebate
                 ? <View style={{ gap: 8 }}>{[1,2,3].map(i => <View key={i} style={styles.aiSkeletonLine} />)}</View>
                 : <Text style={styles.aiPanelText}>{debateContent?.favor}</Text>}
+
+              {/* Botão de curtir a opinião A FAVOR → dá LIKE na notícia */}
+              {!loadingDebate && debateContent && (
+                <TouchableOpacity
+                  style={[
+                    styles.debateVoteBtn,
+                    styles.debateVoteBtnFavor,
+                    debateVote === "like" && styles.debateVoteBtnFavorActive,
+                  ]}
+                  onPress={() => handleDebateVote("like")}
+                  disabled={!user}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons
+                    name="thumb-up"
+                    size={18}
+                    color={debateVote === "like" ? "#FFF" : "#2E7D32"}
+                  />
+                  <Text style={[
+                    styles.debateVoteBtnText,
+                    { color: debateVote === "like" ? "#FFF" : "#2E7D32" },
+                  ]}>
+                    {debateVote === "like" ? "Concordo!" : ""}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
+
+            {/* ── Painel CONTRA ── */}
             <View style={[styles.aiPanel, styles.aiPanelContra]}>
               <View style={styles.aiPanelHeader}>
                 <MaterialIcons name="thumb-down" size={16} color="#C62828" />
                 <Text style={[styles.aiPanelTitle, { color: "#C62828" }]}>Contra</Text>
               </View>
+
               {loadingDebate
                 ? <View style={{ gap: 8 }}>{[1,2,3].map(i => <View key={i} style={styles.aiSkeletonLine} />)}</View>
                 : <Text style={styles.aiPanelText}>{debateContent?.contra}</Text>}
+
+              {/* Botão de curtir a opinião CONTRA → dá DISLIKE na notícia */}
+              {!loadingDebate && debateContent && (
+                <TouchableOpacity
+                  style={[
+                    styles.debateVoteBtn,
+                    styles.debateVoteBtnContra,
+                    debateVote === "dislike" && styles.debateVoteBtnContraActive,
+                  ]}
+                  onPress={() => handleDebateVote("dislike")}
+                  disabled={!user}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons
+                    name="thumb-up"
+                    size={18}
+                    color={debateVote === "dislike" ? "#FFF" : "#C62828"}
+                  />
+                  <Text style={[
+                    styles.debateVoteBtnText,
+                    { color: debateVote === "dislike" ? "#FFF" : "#C62828" },
+                  ]}>
+                    {debateVote === "dislike" ? "Concordo!" : ""}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -251,6 +329,7 @@ function ArticleContent({
   );
 }
 
+// ── ExploreScreen ──────────────────────────────────────────────────────────────
 export default function ExploreScreen() {
   const params = useLocalSearchParams<{
     title?: string; desc?: string; image?: string; author?: string;
@@ -276,92 +355,130 @@ export default function ExploreScreen() {
   const [currentIndex, setCurrentIndex] = useState(startIdx);
   const article = articles[currentIndex] ?? articles[0];
   const nextArticle = articles[currentIndex + 1] ?? null;
+  const prevArticle = currentIndex > 0 ? articles[currentIndex - 1] : null;
 
   const { getRoomByArticleUrl, createRoom } = useForum();
   const { user } = useAuth();
   const router = useRouter();
   const existingRoom = getRoomByArticleUrl(article.url ?? "");
 
-  const translateX = useRef(new Animated.Value(0)).current;
-  const translateXNext = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+  // ── Vertical animation values ──────────────────────────────────────────────
+  // translateY: current card's vertical offset
+  // translateYNext: next card starts at +SCREEN_HEIGHT (below screen)
+  // translateYPrev: prev card starts at -SCREEN_HEIGHT (above screen)
+  const translateY = useRef(new Animated.Value(0)).current;
+  const translateYNext = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const translateYPrev = useRef(new Animated.Value(-SCREEN_HEIGHT)).current;
   const isAnimating = useRef(false);
 
-  const rotate = translateX.interpolate({
-    inputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
-    outputRange: ["-6deg", "0deg", "6deg"],
-    extrapolate: "clamp",
-  });
-
-  // Esquerda = curtir, direita = ignorar
-  const likeOpacity = translateX.interpolate({
+  // Badge opacities: swipe up → next, swipe down → prev
+  const nextOpacity = translateY.interpolate({
     inputRange: [-SWIPE_THRESHOLD, -SWIPE_THRESHOLD / 2, 0],
-    outputRange: [1, 0.6, 0], extrapolate: "clamp",
+    outputRange: [1, 0.5, 0], extrapolate: "clamp",
   });
-  const dislikeOpacity = translateX.interpolate({
+  const prevOpacity = translateY.interpolate({
     inputRange: [0, SWIPE_THRESHOLD / 2, SWIPE_THRESHOLD],
-    outputRange: [0, 0.6, 1], extrapolate: "clamp",
+    outputRange: [0, 0.5, 1], extrapolate: "clamp",
   });
 
-  const advance = useCallback(async (type: "like" | "dislike") => {
+  // ── Navigate forward (swipe up) ───────────────────────────────────────────
+  const goNext = useCallback(async () => {
     if (isAnimating.current) return;
     isAnimating.current = true;
 
-    if (user) {
-      const key = article.url ?? article.title ?? "";
-      if (key) await saveReaction(key, user.email, type, { title: article.title ?? undefined, category });
-    }
-
-    // like = sai pela esquerda, dislike = sai pela direita
-    const toValue = type === "like" ? -SCREEN_WIDTH * 1.5 : SCREEN_WIDTH * 1.5;
     const nextIdx = currentIndex + 1;
     const hasNext = nextIdx < articles.length;
 
     if (!hasNext) {
-      Animated.timing(translateX, { toValue, duration: 260, useNativeDriver: true })
+      Animated.timing(translateY, { toValue: -SCREEN_HEIGHT * 1.2, duration: 260, useNativeDriver: true })
         .start(() => router.back());
       return;
     }
 
-    // Próximo card entra pelo lado oposto ao que o atual sai
-    translateXNext.setValue(type === "like" ? SCREEN_WIDTH : -SCREEN_WIDTH);
+    // next card enters from bottom
+    translateYNext.setValue(SCREEN_HEIGHT);
     Animated.parallel([
-      Animated.timing(translateX, { toValue, duration: 280, useNativeDriver: true }),
-      Animated.timing(translateXNext, { toValue: 0, duration: 280, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: -SCREEN_HEIGHT, duration: 320, useNativeDriver: true }),
+      Animated.timing(translateYNext, { toValue: 0, duration: 320, useNativeDriver: true }),
     ]).start(() => {
-      translateX.setValue(0);
-      translateXNext.setValue(SCREEN_WIDTH);
+      translateY.setValue(0);
+      translateYNext.setValue(SCREEN_HEIGHT);
       setCurrentIndex(nextIdx);
       isAnimating.current = false;
     });
-  }, [user, article, category, currentIndex, articles.length]);
+  }, [currentIndex, articles.length]);
 
-  // Ref mutável para evitar stale closure dentro do panResponder
-  const advanceRef = useRef(advance);
-  advanceRef.current = advance;
+  // ── Navigate backward (swipe down) ───────────────────────────────────────
+  const goPrev = useCallback(async () => {
+    if (isAnimating.current || currentIndex === 0) return;
+    isAnimating.current = true;
 
+    const prevIdx = currentIndex - 1;
+
+    // prev card enters from top
+    translateYPrev.setValue(-SCREEN_HEIGHT);
+    Animated.parallel([
+      Animated.timing(translateY, { toValue: SCREEN_HEIGHT, duration: 320, useNativeDriver: true }),
+      Animated.timing(translateYPrev, { toValue: 0, duration: 320, useNativeDriver: true }),
+    ]).start(() => {
+      translateY.setValue(0);
+      translateYPrev.setValue(-SCREEN_HEIGHT);
+      setCurrentIndex(prevIdx);
+      isAnimating.current = false;
+    });
+  }, [currentIndex]);
+
+  const goNextRef = useRef(goNext);
+  const goPrevRef = useRef(goPrev);
+  goNextRef.current = goNext;
+  goPrevRef.current = goPrev;
+
+  // ── PanResponder (vertical only) ──────────────────────────────────────────
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, g) =>
-        !isAnimating.current && Math.abs(g.dx) > Math.abs(g.dy) * 1.5 && Math.abs(g.dx) > 12,
+        !isAnimating.current &&
+        Math.abs(g.dy) > Math.abs(g.dx) * 1.5 &&
+        Math.abs(g.dy) > 12,
       onPanResponderMove: (_, g) => {
-        translateX.setValue(g.dx);
-        const nextVal = g.dx > 0 ? SCREEN_WIDTH - g.dx : -SCREEN_WIDTH - g.dx;
-        translateXNext.setValue(nextVal);
+        // Resist dragging down on first article, resist dragging up on last
+        translateY.setValue(g.dy);
+        if (g.dy < 0) {
+          // dragging up → next card slides in from bottom
+          translateYNext.setValue(SCREEN_HEIGHT + g.dy);
+        } else {
+          // dragging down → prev card slides in from top
+          translateYPrev.setValue(-SCREEN_HEIGHT + g.dy);
+        }
       },
       onPanResponderRelease: (_, g) => {
-        // Esquerda = curtir, direita = ignorar
-        if (g.dx < -SWIPE_THRESHOLD) advanceRef.current("like");
-        else if (g.dx > SWIPE_THRESHOLD) advanceRef.current("dislike");
-        else {
+        if (g.dy < -SWIPE_THRESHOLD) {
+          goNextRef.current();
+        } else if (g.dy > SWIPE_THRESHOLD) {
+          goPrevRef.current();
+        } else {
+          // snap back
           Animated.parallel([
-            Animated.spring(translateX, { toValue: 0, useNativeDriver: true, friction: 6, tension: 80 }),
-            Animated.spring(translateXNext, { toValue: SCREEN_WIDTH, useNativeDriver: true, friction: 6, tension: 80 }),
+            Animated.spring(translateY, { toValue: 0, useNativeDriver: true, friction: 6, tension: 80 }),
+            Animated.spring(translateYNext, { toValue: SCREEN_HEIGHT, useNativeDriver: true, friction: 6, tension: 80 }),
+            Animated.spring(translateYPrev, { toValue: -SCREEN_HEIGHT, useNativeDriver: true, friction: 6, tension: 80 }),
           ]).start();
         }
       },
     })
   ).current;
+
+  // ── Debate vote handler: saves reaction to AsyncStorage ───────────────────
+  const handleDebateVote = useCallback(async (type: "like" | "dislike") => {
+    if (!user) return;
+    const key = article.url ?? article.title ?? "";
+    if (!key) return;
+    await saveReaction(key, user.email, type, {
+      title: article.title ?? undefined,
+      category,
+    });
+  }, [user, article, category]);
 
   const handleForumPress = async () => {
     if (!user) return;
@@ -380,37 +497,61 @@ export default function ExploreScreen() {
 
   return (
     <View style={styles.root} {...panResponder.panHandlers}>
-      {/* Next card behind */}
-      {nextArticle && (
+
+      {/* Previous card — peeks in from the top when swiping down */}
+      {prevArticle && (
         <Animated.View
-          style={[styles.cardWrapper, styles.cardWrapperNext, { transform: [{ translateX: translateXNext }] }]}
+          style={[styles.cardWrapper, styles.cardWrapperBehind, { transform: [{ translateY: translateYPrev }] }]}
           pointerEvents="none"
         >
-          <ArticleContent article={nextArticle} onForumPress={() => {}} />
+          <ArticleContent
+            article={prevArticle}
+            onForumPress={() => {}}
+            onDebateVote={() => {}}
+          />
         </Animated.View>
       )}
 
-      {/* Like badge — aparece ao deslizar para a esquerda */}
-      <Animated.View pointerEvents="none"
-        style={[styles.swipeBadge, styles.swipeBadgeLike, { opacity: likeOpacity }]}>
-        <MaterialIcons name="favorite" size={34} color="#FFF" />
-        <Text style={styles.swipeBadgeText}>CURTIR</Text>
+      {/* Next card — peeks in from the bottom when swiping up */}
+      {nextArticle && (
+        <Animated.View
+          style={[styles.cardWrapper, styles.cardWrapperBehind, { transform: [{ translateY: translateYNext }] }]}
+          pointerEvents="none"
+        >
+          <ArticleContent
+            article={nextArticle}
+            onForumPress={() => {}}
+            onDebateVote={() => {}}
+          />
+        </Animated.View>
+      )}
+
+      {/* "Next" badge — top centre, fades in when swiping up */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.swipeBadge, styles.swipeBadgeNext, { opacity: nextOpacity }]}
+      >
+        <MaterialIcons name="keyboard-arrow-up" size={28} color="#FFF" />
+        <Text style={styles.swipeBadgeText}>PRÓXIMA</Text>
       </Animated.View>
 
-      {/* Dislike badge — aparece ao deslizar para a direita */}
-      <Animated.View pointerEvents="none"
-        style={[styles.swipeBadge, styles.swipeBadgeDislike, { opacity: dislikeOpacity }]}>
-        <MaterialIcons name="heart-broken" size={34} color="#FFF" />
-        <Text style={styles.swipeBadgeText}>IGNORAR</Text>
+      {/* "Prev" badge — bottom centre, fades in when swiping down */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.swipeBadge, styles.swipeBadgePrev, { opacity: prevOpacity }]}
+      >
+        <MaterialIcons name="keyboard-arrow-down" size={28} color="#FFF" />
+        <Text style={styles.swipeBadgeText}>ANTERIOR</Text>
       </Animated.View>
 
       {/* Current card */}
-      <Animated.View style={[styles.cardWrapper, { transform: [{ translateX }, { rotate }] }]}>
+      <Animated.View style={[styles.cardWrapper, { transform: [{ translateY }] }]}>
         <ArticleContent
           key={currentIndex}
           article={article}
           existingRoomId={existingRoom?.id}
           onForumPress={handleForumPress}
+          onDebateVote={handleDebateVote}
         />
       </Animated.View>
 
@@ -420,6 +561,14 @@ export default function ExploreScreen() {
           <View style={[styles.progressFill, { width: `${((currentIndex + 1) / articles.length) * 100}%` }]} />
         </View>
       )}
+
+      {/* Article counter pill */}
+      {articles.length > 1 && (
+        <View style={styles.counterPill} pointerEvents="none">
+          <Text style={styles.counterText}>{currentIndex + 1} / {articles.length}</Text>
+        </View>
+      )}
+
       <FloatingMenu currentRoute="index" />
     </View>
   );
@@ -428,25 +577,70 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#DDE3F0", overflow: "hidden" },
   cardWrapper: { ...StyleSheet.absoluteFillObject, backgroundColor: "#FFF" },
-  cardWrapperNext: { zIndex: 0 },
+  cardWrapperBehind: { zIndex: 0 },
   scrollView: { flex: 1, backgroundColor: "#FFF" },
-  content: { padding: 24, marginTop: -30, backgroundColor: "#FFF", borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  content: {
+    padding: 24,
+    marginTop: -30,
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+  },
+
+  // ── Swipe badges ──────────────────────────────────────────────────────────
   swipeBadge: {
-    position: "absolute", top: "38%", zIndex: 20,
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 18, paddingVertical: 12, borderRadius: 14, borderWidth: 3,
+    position: "absolute",
+    zIndex: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 3,
+    alignSelf: "center",
+    left: "50%",
+    marginLeft: -80,
   },
-  swipeBadgeLike: { left: 20, backgroundColor: "#2E7D32", borderColor: "#A5D6A7" },
-  swipeBadgeDislike: { right: 20, backgroundColor: "#C62828", borderColor: "#EF9A9A" },
-  // like fica à esquerda (deslize ←), ignorar fica à direita (deslize →)
-  swipeBadgeText: { color: "#FFF", fontSize: 17, fontWeight: "900", letterSpacing: 1 },
-  swipeHint: {
-    flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14,
-    paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#F8F9FA", borderRadius: 10,
+  swipeBadgeNext: {
+    top: 24,
+    backgroundColor: "#2E7D32",
+    borderColor: "#A5D6A7",
   },
-  swipeHintText: { fontSize: 12, color: "#AAA", fontWeight: "500" },
-  progressBar: { position: "absolute", top: 0, left: 0, right: 0, height: 3, backgroundColor: "rgba(0,0,0,0.08)", zIndex: 30 },
+  swipeBadgePrev: {
+    bottom: 100,
+    backgroundColor: "#1565C0",
+    borderColor: "#90CAF9",
+  },
+  swipeBadgeText: {
+    color: "#FFF",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  // ── Progress / counter ────────────────────────────────────────────────────
+  progressBar: {
+    position: "absolute",
+    top: 0, left: 0, right: 0,
+    height: 3,
+    backgroundColor: "rgba(0,0,0,0.08)",
+    zIndex: 30,
+  },
   progressFill: { height: "100%", backgroundColor: "#4169E1", borderRadius: 2 },
+  counterPill: {
+    position: "absolute",
+    top: 10,
+    right: 16,
+    zIndex: 30,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  counterText: { color: "#FFF", fontSize: 12, fontWeight: "700" },
+
+  // ── Article content ───────────────────────────────────────────────────────
   sourceBadge: { color: "#E63946", fontWeight: "bold", fontSize: 13, marginBottom: 12 },
   headline: { fontSize: 28, fontWeight: "800", color: "#1A1A1A", lineHeight: 36, marginBottom: 16 },
   authorRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
@@ -454,21 +648,116 @@ const styles = StyleSheet.create({
   authorName: { color: "#888", fontSize: 14 },
   divider: { height: 1, backgroundColor: "#F0F0F0", marginBottom: 20 },
   description: { fontSize: 17, lineHeight: 28, color: "#444", marginBottom: 24 },
-  primaryButton: { backgroundColor: "#1A1A1A", paddingVertical: 18, borderRadius: 16, alignItems: "center", marginBottom: 12 },
-  forumButton: { backgroundColor: "#4169E1", paddingVertical: 18, borderRadius: 16, alignItems: "center", marginBottom: 50, flexDirection: "row", justifyContent: "center" },
+
+  swipeHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 10,
+  },
+  swipeHintText: { fontSize: 12, color: "#AAA", fontWeight: "500" },
+
+  // ── Buttons ───────────────────────────────────────────────────────────────
+  primaryButton: {
+    backgroundColor: "#1A1A1A",
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  forumButton: {
+    backgroundColor: "#4169E1",
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: "center",
+    marginBottom: 50,
+    flexDirection: "row",
+    justifyContent: "center",
+  },
   forumButtonDisabled: { backgroundColor: "#9DB3E8" },
   buttonLabel: { color: "#FFF", fontSize: 16, fontWeight: "700" },
+
+  // ── AI panels ─────────────────────────────────────────────────────────────
   aiButtonsRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
-  aiButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: "#4169E1", backgroundColor: "#FFF" },
+  aiButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#4169E1",
+    backgroundColor: "#FFF",
+  },
   aiButtonActive: { backgroundColor: "#4169E1" },
   aiButtonText: { fontSize: 13, fontWeight: "700", color: "#4169E1" },
   aiButtonTextActive: { color: "#FFF" },
-  aiPanel: { backgroundColor: "#F0F4FF", borderRadius: 16, padding: 16, marginBottom: 20, borderLeftWidth: 3, borderLeftColor: "#4169E1" },
+  aiPanel: {
+    backgroundColor: "#F0F4FF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 3,
+    borderLeftColor: "#4169E1",
+  },
   aiPanelFavor: { backgroundColor: "#F1F8E9", borderLeftColor: "#2E7D32" },
   aiPanelContra: { backgroundColor: "#FFEBEE", borderLeftColor: "#C62828" },
   aiPanelHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
   refreshButton: { marginLeft: "auto", padding: 2 },
   aiPanelTitle: { fontSize: 13, fontWeight: "700", color: "#4169E1" },
-  aiPanelText: { fontSize: 15, lineHeight: 23, color: "#333" },
+  aiPanelText: { fontSize: 15, lineHeight: 23, color: "#333", marginBottom: 12 },
   aiSkeletonLine: { height: 12, backgroundColor: "#DDE3F0", borderRadius: 6, marginBottom: 8 },
+
+  // ── Debate vote buttons ───────────────────────────────────────────────────
+  debateVoteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    margin: "auto",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginTop: 4,
+    width: 125
+  },
+  debateVoteBtnFavor: {
+    borderColor: "#2E7D32",
+    backgroundColor: "rgba(46,125,50,0.08)",
+  },
+  debateVoteBtnFavorActive: {
+    backgroundColor: "#2E7D32",
+    borderColor: "#2E7D32",
+  },
+  debateVoteBtnContra: {
+    borderColor: "#C62828",
+    backgroundColor: "rgba(198,40,40,0.08)",
+  },
+  debateVoteBtnContraActive: {
+    backgroundColor: "#C62828",
+    borderColor: "#C62828",
+  },
+  debateVoteBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  debateLegend: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    justifyContent: "center",
+    marginTop: -4,
+  },
+  debateLegendText: {
+    fontSize: 11,
+    color: "#999",
+    fontStyle: "italic",
+  },
 });
