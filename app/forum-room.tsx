@@ -17,6 +17,7 @@ import { useLocalSearchParams, router, useRouter } from "expo-router";
 import { useForum, ForumComment } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
 import { useNotification } from "../src/context/NotificationContext";
+import { notifyFollowersForumComment, notifyFollowersForumRoom } from "../src/context/GalleryContext";
 import MediaViewer from "../components/MediaViewer";
 
 const PAGE_SIZE = 10;
@@ -58,20 +59,10 @@ function ArticleHeader({
         {!!url && (
           <TouchableOpacity
             style={articleStyles.linkRow}
-            onPress={() =>
-              router.push({
-                pathname: "/explore",
-                params: {
-                  title: title ?? "",
-                  desc: desc ?? "",
-                  image: image ?? "",
-                  url: url ?? "",
-                },
-              })
-            }
+            onPress={() => Linking.openURL(url)}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="article" size={14} color="#4169E1" />
+            <MaterialIcons name="open-in-new" size={14} color="#4169E1" />
             <Text style={articleStyles.linkText}>Ler artigo completo</Text>
           </TouchableOpacity>
         )}
@@ -345,6 +336,9 @@ export default function ForumRoomScreen() {
         user.photo ?? undefined,
         replyingTo?.id ?? null
       );
+
+      // Notifica seguidores do autor que ele comentou
+      await notifyFollowersForumComment(user.email, user.name, room.id);
 
       if (replyingTo && replyingTo.userEmail !== user.email) {
         await sendNotification({

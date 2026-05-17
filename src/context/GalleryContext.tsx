@@ -6,6 +6,7 @@ import React, {
   useCallback,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 
 export interface GalleryPhoto {
   id: string;
@@ -33,6 +34,8 @@ interface GalleryContextData {
 }
 
 const STORAGE_KEY = "@Gallery:photos";
+const FOLLOW_KEY = "@Follow:data";
+
 const GalleryContext = createContext<GalleryContextData>({} as GalleryContextData);
 
 function generateId(): string {
@@ -41,6 +44,98 @@ function generateId(): string {
 
 function isExpired(photo: GalleryPhoto): boolean {
   return new Date() > new Date(photo.expiresAt);
+}
+
+/** Retorna os e-mails de quem segue o usuário `authorEmail` */
+async function getFollowersOf(authorEmail: string): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(FOLLOW_KEY);
+    if (!raw) return [];
+    const map: Record<string, string[]> = JSON.parse(raw);
+    return Object.entries(map)
+      .filter(([, following]) => following.includes(authorEmail))
+      .map(([follower]) => follower);
+  } catch {
+    return [];
+  }
+}
+
+/** Dispara notificação para os seguidores quando o autor publica uma foto */
+async function notifyFollowers(authorEmail: string, authorName: string): Promise<void> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted") return;
+
+    const followers = await getFollowersOf(authorEmail);
+    if (followers.length === 0) return;
+
+    // Uma única notificação agrupada (push local não tem destino individual em AsyncStorage)
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "📸 Nova foto no story!",
+        body: `${authorName} publicou uma nova foto.`,
+        data: { type: "new_story", fromEmail: authorEmail, fromName: authorName },
+        sound: true,
+      },
+      trigger: null,
+    });
+  } catch (e) {
+    console.error("Erro ao notificar seguidores (foto):", e);
+  }
+}
+
+/** Dispara notificação para seguidores quando o autor comenta no fórum */
+export async function notifyFollowersForumComment(
+  authorEmail: string,
+  authorName: string,
+  roomId: string
+): Promise<void> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted") return;
+
+    const followers = await getFollowersOf(authorEmail);
+    if (followers.length === 0) return;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "💬 Novo comentário de quem você segue!",
+        body: `${authorName} comentou em um fórum.`,
+        data: { type: "comment_reply", fromName: authorName, roomId },
+        sound: true,
+      },
+      trigger: null,
+    });
+  } catch (e) {
+    console.error("Erro ao notificar seguidores (comentário):", e);
+  }
+}
+
+/** Dispara notificação para seguidores quando o autor cria uma sala de fórum */
+export async function notifyFollowersForumRoom(
+  authorEmail: string,
+  authorName: string,
+  roomId: string
+): Promise<void> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted") return;
+
+    const followers = await getFollowersOf(authorEmail);
+    if (followers.length === 0) return;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "🗣️ Nova sala de fórum!",
+        body: `${authorName} criou uma nova sala de discussão.`,
+        data: { type: "comment_reply", fromName: authorName, roomId },
+        sound: true,
+      },
+      trigger: null,
+    });
+  } catch (e) {
+    console.error("Erro ao notificar seguidores (sala):", e);
+  }
 }
 
 export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -103,6 +198,9 @@ export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = [newPhoto, ...photos];
       setPhotos(updated);
       await persist(updated);
+
+      // ✅ Notifica seguidores
+      await notifyFollowers(userEmail, userName);
     },
     [photos, persist]
   );

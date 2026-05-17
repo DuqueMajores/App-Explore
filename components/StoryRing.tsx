@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { GalleryPhoto, useGallery } from "../src/context/GalleryContex";
+import { GalleryPhoto, useGallery } from "../src/context/GalleryContext";
 import { useNotification } from "../src/context/NotificationContext";
 
 const { width, height } = Dimensions.get("window");

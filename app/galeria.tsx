@@ -13,7 +13,7 @@ import {
 import { MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useGallery, GalleryPhoto } from "../src/context/GalleryContex";
+import { useGallery, GalleryPhoto } from "../src/context/GalleryContext";
 import { useAuth } from "../src/context/AuthContext";
 import StoryRing from "../components/StoryRing";
 import FloatingMenu from "../components/Floatingmenu";

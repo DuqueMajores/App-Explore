@@ -22,6 +22,7 @@ import { useAuth } from "../src/context/AuthContext";
 import MediaViewer, { detectMedia } from "../components/MediaViewer";
 import InfoDashboard from "../components/infodashboard";
 import FloatingMenu from "../components/Floatingmenu";
+import FollowingStories from "../components/FollowingStories";
 
 type Article = {
   author?: string | null;
@@ -744,6 +745,18 @@ export default function HomeScreen() {
           <Text style={styles.menuOptionText}>Forum</Text>
         </TouchableOpacity>
       </Animated.View>
+
+      {/* ── Stories de quem o usuário segue ── */}
+      {user && (
+        <FollowingStories
+          currentUser={{
+            email: user.email,
+            name: user.name,
+            photo: user.photo,
+          }}
+          onAddPhoto={() => router.push("/perfil")}
+        />
+      )}
 
       {/* ── Search ── */}
       <View style={styles.searchContainer}>

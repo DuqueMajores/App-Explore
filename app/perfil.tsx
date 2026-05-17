@@ -16,18 +16,20 @@ import {
   View,
   Dimensions,
   FlatList,
+  Animated,
 } from "react-native";
 import { useAuth } from "../src/context/AuthContext";
-import { useGallery, GalleryPhoto } from "../src/context/GalleryContex";
+import { useGallery, GalleryPhoto } from "../src/context/GalleryContext";
 import { useForum, ForumRoom, ForumComment } from "../src/context/ForumContext";
+import { useFollow } from "../src/context/FollowContext";
+import { useNotification } from "../src/context/NotificationContext";
 import StoryRing from "../components/StoryRing";
+import FollowersModal from "../components/FollowersModal";
 import FloatingMenu from "../components/Floatingmenu";
 
 const { width } = Dimensions.get("window");
 const GALLERY_COL = 3;
 const GALLERY_SIZE = (width - 40 - 20 - (GALLERY_COL - 1) * 4) / GALLERY_COL;
-
-
 
 interface PublicUser {
   name: string;
@@ -38,7 +40,7 @@ interface PublicUser {
   dislikes: string[];
 }
 
-// ── Slide viewer full-screen (reutilizável) ────────────────────────────────────
+// ── Slide viewer full-screen ───────────────────────────────────────────────────
 interface SlideViewerProps {
   photos: GalleryPhoto[];
   initialIndex: number;
@@ -334,7 +336,6 @@ function ProfileGallery({
         </View>
       )}
 
-      {/* Slide viewer */}
       <Modal
         visible={slideIndex !== null}
         animationType="fade"
@@ -378,10 +379,7 @@ const galStyles = StyleSheet.create({
   cardSub: { fontSize: 12, color: "#999" },
   empty: { alignItems: "center", paddingVertical: 24, gap: 8 },
   emptyText: { fontSize: 13, color: "#BBB" },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
+  grid: { flexDirection: "row", flexWrap: "wrap" },
   thumb: {
     width: GALLERY_SIZE,
     height: GALLERY_SIZE,
@@ -409,15 +407,10 @@ const galStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  moreOverlayText: {
-    color: "#FFF",
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
+  moreOverlayText: { color: "#FFF", fontSize: 22, fontWeight: "800", letterSpacing: 0.5 },
 });
 
-// ── Card de comentários do usuário no fórum ───────────────────────────────────
+// ── Card de comentários do fórum ───────────────────────────────────────────────
 interface UserCommentEntry {
   comment: ForumComment;
   room: ForumRoom;
@@ -447,7 +440,6 @@ function UserCommentsCard({ userEmail }: { userEmail: string }) {
 
   return (
     <>
-      {/* Card clicável */}
       <TouchableOpacity
         style={cmtStyles.card}
         activeOpacity={0.75}
@@ -469,19 +461,10 @@ function UserCommentsCard({ userEmail }: { userEmail: string }) {
         <MaterialIcons name="chevron-right" size={22} color="#CCC" />
       </TouchableOpacity>
 
-      {/* Modal com lista de comentários */}
-      <Modal
-        visible={expanded}
-        animationType="slide"
-        onRequestClose={() => setExpanded(false)}
-      >
+      <Modal visible={expanded} animationType="slide" onRequestClose={() => setExpanded(false)}>
         <View style={cmtStyles.modalRoot}>
-          {/* Header do modal */}
           <View style={cmtStyles.modalHeader}>
-            <TouchableOpacity
-              onPress={() => setExpanded(false)}
-              style={cmtStyles.modalBackBtn}
-            >
+            <TouchableOpacity onPress={() => setExpanded(false)} style={cmtStyles.modalBackBtn}>
               <MaterialIcons name="arrow-back" size={24} color="#212529" />
             </TouchableOpacity>
             <Text style={cmtStyles.modalTitle}>Comentários no Fórum</Text>
@@ -507,46 +490,30 @@ function UserCommentsCard({ userEmail }: { userEmail: string }) {
                   activeOpacity={0.8}
                   onPress={() => {
                     setExpanded(false);
-                    router.push({
-                      pathname: "/forum-room",
-                      params: { roomId: item.room.id },
-                    });
+                    router.push({ pathname: "/forum-room", params: { roomId: item.room.id } });
                   }}
                 >
-                  {/* Sala de origem */}
                   <View style={cmtStyles.roomRow}>
                     <MaterialIcons name="forum" size={13} color="#4169E1" />
                     <Text style={cmtStyles.roomTitle} numberOfLines={1}>
                       {item.room.articleTitle}
                     </Text>
                   </View>
-
-                  {/* Texto do comentário */}
                   <Text style={cmtStyles.commentText} numberOfLines={4}>
                     {item.comment.text}
                   </Text>
-
-                  {/* Rodapé: data + likes */}
                   <View style={cmtStyles.commentFooter}>
                     <Text style={cmtStyles.commentDate}>
-                      {new Date(item.comment.createdAt).toLocaleDateString(
-                        "pt-BR"
-                      )}{" "}
-                      {new Date(item.comment.createdAt).toLocaleTimeString(
-                        "pt-BR",
-                        { hour: "2-digit", minute: "2-digit" }
-                      )}
+                      {new Date(item.comment.createdAt).toLocaleDateString("pt-BR")}{" "}
+                      {new Date(item.comment.createdAt).toLocaleTimeString("pt-BR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </Text>
                     {item.comment.likes.length > 0 && (
                       <View style={cmtStyles.likeRow}>
-                        <MaterialIcons
-                          name="favorite"
-                          size={13}
-                          color="#E63946"
-                        />
-                        <Text style={cmtStyles.likeCount}>
-                          {item.comment.likes.length}
-                        </Text>
+                        <MaterialIcons name="favorite" size={13} color="#E63946" />
+                        <Text style={cmtStyles.likeCount}>{item.comment.likes.length}</Text>
                       </View>
                     )}
                   </View>
@@ -571,12 +538,9 @@ const cmtStyles = StyleSheet.create({
     gap: 14,
   },
   iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 44, height: 44, borderRadius: 12,
     backgroundColor: "#EEF2FF",
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: "center", alignItems: "center",
   },
   textWrap: { flex: 1 },
   title: { fontSize: 15, fontWeight: "700", color: "#212529", marginBottom: 2 },
@@ -593,12 +557,9 @@ const cmtStyles = StyleSheet.create({
     elevation: 2,
   },
   modalBackBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 40, height: 40, borderRadius: 12,
     backgroundColor: "#F8F9FA",
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: "center", alignItems: "center",
   },
   modalTitle: { fontSize: 18, fontWeight: "800", color: "#212529" },
   listContent: { padding: 16, gap: 12 },
@@ -610,53 +571,100 @@ const cmtStyles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: "#4169E1",
   },
-  roomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginBottom: 8,
-  },
-  roomTitle: {
-    fontSize: 12,
-    color: "#4169E1",
-    fontWeight: "600",
-    flex: 1,
-  },
-  commentText: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: "#333",
-    marginBottom: 10,
-  },
-  commentFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  roomRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 8 },
+  roomTitle: { fontSize: 12, color: "#4169E1", fontWeight: "600", flex: 1 },
+  commentText: { fontSize: 14, lineHeight: 21, color: "#333", marginBottom: 10 },
+  commentFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   commentDate: { fontSize: 11, color: "#BBB" },
   likeRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   likeCount: { fontSize: 12, fontWeight: "700", color: "#E63946" },
-  empty: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-    gap: 12,
-  },
+  empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32, gap: 12 },
   emptyText: { fontSize: 18, fontWeight: "700", color: "#999" },
-  emptySub: {
-    fontSize: 13,
-    color: "#BBB",
-    textAlign: "center",
-    lineHeight: 20,
-  },
+  emptySub: { fontSize: 13, color: "#BBB", textAlign: "center", lineHeight: 20 },
 });
 
-// ── Perfil de outro usuário ───────────────────────────────────────────────────
+// ── Card de seguidores (abaixo do perfil, acima da galeria) ───────────────────
+function FollowStatsCard({
+  targetEmail,
+  currentUserEmail,
+}: {
+  targetEmail: string;
+  currentUserEmail?: string;
+}) {
+  const { getFollowers, getFollowing } = useFollow();
+  const [modal, setModal] = useState<"followers" | "following" | null>(null);
+
+  const followers = getFollowers(targetEmail);
+  const following = getFollowing(targetEmail);
+
+  return (
+    <>
+      <View style={followStatsStyles.card}>
+        <TouchableOpacity
+          style={followStatsStyles.stat}
+          activeOpacity={0.75}
+          onPress={() => setModal("followers")}
+        >
+          <Text style={followStatsStyles.statNum}>{followers.length}</Text>
+          <Text style={followStatsStyles.statLabel}>Seguidores</Text>
+        </TouchableOpacity>
+
+        <View style={followStatsStyles.divider} />
+
+        <TouchableOpacity
+          style={followStatsStyles.stat}
+          activeOpacity={0.75}
+          onPress={() => setModal("following")}
+        >
+          <Text style={followStatsStyles.statNum}>{following.length}</Text>
+          <Text style={followStatsStyles.statLabel}>Seguindo</Text>
+        </TouchableOpacity>
+      </View>
+
+      {modal && (
+        <FollowersModal
+          visible={!!modal}
+          onClose={() => setModal(null)}
+          targetEmail={targetEmail}
+          mode={modal}
+        />
+      )}
+    </>
+  );
+}
+
+const followStatsStyles = StyleSheet.create({
+  card: {
+    flexDirection: "row",
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    elevation: 2,
+    overflow: "hidden",
+  },
+  stat: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 16,
+    gap: 4,
+  },
+  statNum: { fontSize: 22, fontWeight: "800", color: "#212529" },
+  statLabel: { fontSize: 12, color: "#999", fontWeight: "600" },
+  divider: { width: 1, backgroundColor: "#F0F0F0", marginVertical: 12 },
+});
+
+// ── Perfil de outro usuário ────────────────────────────────────────────────────
 function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
   const { user: loggedUser, handleProfileReaction } = useAuth();
+  const { isFollowing, toggleFollow, followersCount } = useFollow();
+  const { sendNotification } = useNotification();
   const [target, setTarget] = useState<PublicUser | null>(null);
   const [loadingTarget, setLoadingTarget] = useState(true);
+  // Animação da estrela de follow
+  const starScale = useRef(new Animated.Value(1)).current;
+
+  const following = loggedUser ? isFollowing(loggedUser.email, targetEmail) : false;
 
   const loadTarget = async () => {
     setLoadingTarget(true);
@@ -675,14 +683,32 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
     }
   };
 
-  useEffect(() => {
-    loadTarget();
-  }, [targetEmail]);
+  useEffect(() => { loadTarget(); }, [targetEmail]);
 
   const handleReact = async (type: "like" | "dislike") => {
     if (!loggedUser) return;
     await handleProfileReaction(targetEmail, type);
     await loadTarget();
+  };
+
+  const handleFollow = async () => {
+    if (!loggedUser || !target) return;
+
+    // Animação de bounce na estrela
+    Animated.sequence([
+      Animated.spring(starScale, { toValue: 1.4, useNativeDriver: true, friction: 3 }),
+      Animated.spring(starScale, { toValue: 1, useNativeDriver: true, friction: 4 }),
+    ]).start();
+
+    const nowFollowing = await toggleFollow(loggedUser.email, targetEmail);
+
+    if (nowFollowing) {
+      // Notifica o usuário alvo
+      await sendNotification({
+        type: "profile_like",
+        fromName: loggedUser.name,
+      });
+    }
   };
 
   if (loadingTarget) {
@@ -707,12 +733,9 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
   }
 
   const isSelf = loggedUser?.email === target.email;
-  const likedByMe = loggedUser
-    ? (target.likes ?? []).includes(loggedUser.email)
-    : false;
-  const dislikedByMe = loggedUser
-    ? (target.dislikes ?? []).includes(loggedUser.email)
-    : false;
+  const likedByMe = loggedUser ? (target.likes ?? []).includes(loggedUser.email) : false;
+  const dislikedByMe = loggedUser ? (target.dislikes ?? []).includes(loggedUser.email) : false;
+  const fCount = followersCount(targetEmail);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
@@ -725,7 +748,7 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
         <View style={{ width: 48 }} />
       </View>
 
-      {/* Avatar + info */}
+      {/* Perfil */}
       <View style={styles.profileSection}>
         <View style={styles.avatarWrapper}>
           <StoryRing
@@ -736,6 +759,31 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
             currentUserEmail={loggedUser?.email}
           />
         </View>
+
+        {/* Estrela de seguir */}
+        {!isSelf && loggedUser && (
+          <Animated.View style={{ transform: [{ scale: starScale }], marginBottom: 6 }}>
+            <TouchableOpacity
+              style={[styles.followStarBtn, following && styles.followStarBtnActive]}
+              onPress={handleFollow}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons
+                name={following ? "star" : "star-outline"}
+                size={20}
+                color={following ? "#FFD700" : "#4169E1"}
+              />
+              <Text style={[styles.followStarText, following && styles.followStarTextActive]}>
+                {following ? "Seguindo" : "Seguir"}
+              </Text>
+              {fCount > 0 && (
+                <View style={styles.followersPill}>
+                  <Text style={styles.followersPillText}>{fCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+        )}
 
         <Text style={styles.userName}>{target.name}</Text>
 
@@ -776,26 +824,21 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
           <Text style={styles.reactionCount}>{target.likes?.length ?? 0}</Text>
         </View>
 
-        {isSelf && (
-          <Text style={styles.selfNote}>Este é o seu próprio perfil</Text>
-        )}
-        {!loggedUser && (
-          <Text style={styles.selfNote}>Faça login para reagir</Text>
-        )}
+        {isSelf && <Text style={styles.selfNote}>Este é o seu próprio perfil</Text>}
+        {!loggedUser && <Text style={styles.selfNote}>Faça login para reagir</Text>}
       </View>
 
-      {/* Galeria pública do usuário */}
-      <ProfileGallery
-        userEmail={target.email}
-        currentUserEmail={loggedUser?.email}
-      />
+      {/* Card de seguidores / seguindo */}
+      <FollowStatsCard targetEmail={target.email} currentUserEmail={loggedUser?.email} />
+
+      {/* Galeria pública */}
+      <ProfileGallery userEmail={target.email} currentUserEmail={loggedUser?.email} />
 
       {/* Comentários no fórum */}
       <View style={styles.infoSection}>
         <UserCommentsCard userEmail={target.email} />
       </View>
 
-      {/* Info card */}
       <View style={styles.infoSection}>
         <View style={styles.infoCard}>
           <MaterialIcons name="verified-user" size={24} color="#4169E1" />
@@ -812,8 +855,7 @@ function OtherUserProfile({ targetEmail }: { targetEmail: string }) {
 // ── Perfil próprio ─────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const { viewUserEmail } = useLocalSearchParams<{ viewUserEmail?: string }>();
-  const { user, signOut, updateProfile, handleProfileReaction, loading } =
-    useAuth();
+  const { user, signOut, updateProfile, handleProfileReaction, loading } = useAuth();
   const { addPhoto, getPhotosByUser } = useGallery();
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -863,7 +905,6 @@ export default function ProfileScreen() {
     }
   };
 
-  // ── Adicionar foto ao story ────────────────────────────────────────────────
   const handleAddStoryPhoto = async () => {
     if (!user) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -878,12 +919,7 @@ export default function ProfileScreen() {
       quality: 0.85,
     });
     if (!result.canceled) {
-      await addPhoto(
-        user.email,
-        user.name,
-        user.photo,
-        result.assets[0].uri
-      );
+      await addPhoto(user.email, user.name, user.photo, result.assets[0].uri);
       Alert.alert("✅ Foto publicada!", "Sua foto ficará visível por 24 horas.");
     }
   };
@@ -895,17 +931,10 @@ export default function ProfileScreen() {
     }
     setIsSaving(true);
     try {
-      await updateProfile(
-        editName.trim(),
-        editPhotoUrl.trim() || undefined,
-        editProfession.trim()
-      );
+      await updateProfile(editName.trim(), editPhotoUrl.trim() || undefined, editProfession.trim());
       setEditModalVisible(false);
     } catch (error: any) {
-      Alert.alert(
-        "Erro",
-        error.message || "Não foi possível salvar as alterações."
-      );
+      Alert.alert("Erro", error.message || "Não foi possível salvar as alterações.");
     } finally {
       setIsSaving(false);
     }
@@ -951,10 +980,7 @@ export default function ProfileScreen() {
       <View style={styles.containerCenter}>
         <MaterialIcons name="lock" size={60} color="#DDD" />
         <Text style={styles.notLoggedText}>Você não está logado.</Text>
-        <TouchableOpacity
-          style={styles.loginButton}
-          onPress={() => router.replace("/login")}
-        >
+        <TouchableOpacity style={styles.loginButton} onPress={() => router.replace("/login")}>
           <Text style={styles.loginButtonText}>Fazer Login</Text>
         </TouchableOpacity>
       </View>
@@ -967,318 +993,244 @@ export default function ProfileScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-    <ScrollView
-      style={[styles.container, isDark && styles.darkBg]}
-      contentContainerStyle={styles.scrollContent}
-    >
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <MaterialIcons
-            name="arrow-back"
-            size={24}
-            color={isDark ? "#FFF" : "#333"}
-          />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, isDark && styles.darkText]}>
-          Meu Perfil
-        </Text>
-        <TouchableOpacity style={styles.editButton} onPress={openEditModal}>
-          <MaterialIcons name="edit" size={20} color="#4169E1" />
-          <Text style={styles.editButtonText}>Editar</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Profile Section ── */}
-      <View style={[styles.profileSection, isDark && styles.darkCard]}>
-        {/* StoryRing com botão "+" */}
-        <View style={styles.avatarWrapper}>
-          <StoryRing
-            userEmail={user.email}
-            userName={user.name}
-            userPhoto={user.photo}
-            size={90}
-            isOwn
-            onAddPhoto={handleAddStoryPhoto}
-            currentUserEmail={user.email}
-          />
-        </View>
-
-        <Text style={[styles.userName, isDark && styles.darkText]}>
-          {user.name}
-        </Text>
-
-        {!!user.profession && (
-          <View style={styles.professionRow}>
-            <MaterialIcons name="work-outline" size={14} color="#4169E1" />
-            <Text style={styles.professionText}>{user.profession}</Text>
-          </View>
-        )}
-
-        <Text style={styles.userEmail}>{user.email}</Text>
-
-        {/* Reações */}
-        <View style={styles.reactionContainer}>
-          <TouchableOpacity
-            onPress={() => handleProfileReaction(user.email, "dislike")}
-            style={styles.reactionButton}
-          >
-            <MaterialIcons
-              name="thumb-down"
-              size={24}
-              color={
-                (user.dislikes ?? []).includes(user.email)
-                  ? "#E63946"
-                  : "#999"
-              }
-            />
-          </TouchableOpacity>
-          <Text style={[styles.reactionCount, isDark && styles.darkText]}>
-            {user.dislikes?.length ?? 0}
-          </Text>
-
-          <TouchableOpacity
-            onPress={() => handleProfileReaction(user.email, "like")}
-            style={styles.reactionButton}
-          >
-            <MaterialIcons
-              name="thumb-up"
-              size={24}
-              color={
-                (user.likes ?? []).includes(user.email) ? "#4169E1" : "#999"
-              }
-            />
-          </TouchableOpacity>
-          <Text style={[styles.reactionCount, isDark && styles.darkText]}>
-            {user.likes?.length ?? 0}
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.addStoryBtn}
-          onPress={handleAddStoryPhoto}
-        >
-          <MaterialIcons name="add-photo-alternate" size={18} color="#4169E1" />
-          <Text style={styles.addStoryBtnText}>Publicar foto no story</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Galeria do próprio usuário ── */}
-      <ProfileGallery
-        userEmail={user.email}
-        currentUserEmail={user.email}
-      />
-
-      {/* ── Comentários no fórum ── */}
-      <View style={styles.infoSection}>
-        <UserCommentsCard userEmail={user.email} />
-      </View>
-
-      {/* ── Info Section ── */}
-      <View style={styles.infoSection}>
-        <View style={[styles.infoCard, isDark && styles.darkCard]}>
-          <MaterialIcons name="verified-user" size={24} color="#4169E1" />
-          <View style={styles.infoContent}>
-            <Text style={styles.infoLabel}>Status</Text>
-            <Text style={[styles.infoValue, isDark && styles.darkText]}>
-              Conta Ativa
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.infoCard, isDark && styles.darkCard]}>
-          <MaterialIcons name="calendar-today" size={24} color="#4169E1" />
-          <View style={styles.infoContent}>
-            <Text style={styles.infoLabel}>Membro desde</Text>
-            <Text style={[styles.infoValue, isDark && styles.darkText]}>
-              {new Date().toLocaleDateString("pt-BR")}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ── Logout ── */}
-      <TouchableOpacity
-        style={styles.logoutItem}
-        onPress={handleLogout}
-        disabled={isLoggingOut}
+      <ScrollView
+        style={[styles.container, isDark && styles.darkBg]}
+        contentContainerStyle={styles.scrollContent}
       >
-        {isLoggingOut ? (
-          <ActivityIndicator color="#E63946" size="small" />
-        ) : (
-          <MaterialIcons name="logout" size={22} color="#E63946" />
-        )}
-        <Text style={styles.logoutText}>
-          {isLoggingOut ? "Saindo..." : "Sair da Conta"}
-        </Text>
-        {!isLoggingOut && (
-          <MaterialIcons name="chevron-right" size={22} color="#E63946" />
-        )}
-      </TouchableOpacity>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color={isDark ? "#FFF" : "#333"} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, isDark && styles.darkText]}>Meu Perfil</Text>
+          <TouchableOpacity style={styles.editButton} onPress={openEditModal}>
+            <MaterialIcons name="edit" size={20} color="#4169E1" />
+            <Text style={styles.editButtonText}>Editar</Text>
+          </TouchableOpacity>
+        </View>
 
-      <Text style={styles.footerText}>Versão 1.0.0</Text>
+        {/* Seção de perfil */}
+        <View style={[styles.profileSection, isDark && styles.darkCard]}>
+          <View style={styles.avatarWrapper}>
+            <StoryRing
+              userEmail={user.email}
+              userName={user.name}
+              userPhoto={user.photo}
+              size={90}
+              isOwn
+              onAddPhoto={handleAddStoryPhoto}
+              currentUserEmail={user.email}
+            />
+          </View>
 
-      {/* ── Modal de Edição ── */}
-      <Modal
-        visible={editModalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => !isSaving && setEditModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Editar Perfil</Text>
-              <TouchableOpacity
-                onPress={() => !isSaving && setEditModalVisible(false)}
-                disabled={isSaving}
-              >
-                <MaterialIcons name="close" size={24} color="#666" />
-              </TouchableOpacity>
+          <Text style={[styles.userName, isDark && styles.darkText]}>{user.name}</Text>
+
+          {!!user.profession && (
+            <View style={styles.professionRow}>
+              <MaterialIcons name="work-outline" size={14} color="#4169E1" />
+              <Text style={styles.professionText}>{user.profession}</Text>
             </View>
+          )}
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.modalAvatarArea}>
-                {showPreview ? (
-                  <Image
-                    source={{ uri: previewUrl }}
-                    style={styles.modalAvatarImage}
-                    onError={() => setPhotoPreviewError(true)}
-                  />
-                ) : (
-                  <View style={styles.modalAvatarPlaceholder}>
-                    <Text style={styles.modalAvatarInitial}>
-                      {(editName || user.name).charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-              </View>
+          <Text style={styles.userEmail}>{user.email}</Text>
 
-              <TouchableOpacity
-                style={styles.galleryBtn}
-                onPress={pickFromGallery}
-              >
-                <MaterialIcons name="photo-library" size={20} color="#FFF" />
-                <Text style={styles.galleryBtnText}>
-                  Escolher da Galeria
-                </Text>
-              </TouchableOpacity>
+          <View style={styles.reactionContainer}>
+            <TouchableOpacity
+              onPress={() => handleProfileReaction(user.email, "dislike")}
+              style={styles.reactionButton}
+            >
+              <MaterialIcons
+                name="thumb-down"
+                size={24}
+                color={(user.dislikes ?? []).includes(user.email) ? "#E63946" : "#999"}
+              />
+            </TouchableOpacity>
+            <Text style={[styles.reactionCount, isDark && styles.darkText]}>
+              {user.dislikes?.length ?? 0}
+            </Text>
 
-              {/* Nome */}
-              <Text style={styles.inputLabel}>Nome</Text>
-              <View style={styles.inputContainer}>
-                <MaterialIcons
-                  name="person"
-                  size={20}
-                  color="#999"
-                  style={{ marginRight: 10 }}
-                />
-                <TextInput
-                  style={styles.textInput}
-                  value={editName}
-                  onChangeText={setEditName}
-                  placeholder="Seu nome"
-                  placeholderTextColor="#CCC"
-                  maxLength={50}
-                  editable={!isSaving}
-                />
-              </View>
+            <TouchableOpacity
+              onPress={() => handleProfileReaction(user.email, "like")}
+              style={styles.reactionButton}
+            >
+              <MaterialIcons
+                name="thumb-up"
+                size={24}
+                color={(user.likes ?? []).includes(user.email) ? "#4169E1" : "#999"}
+              />
+            </TouchableOpacity>
+            <Text style={[styles.reactionCount, isDark && styles.darkText]}>
+              {user.likes?.length ?? 0}
+            </Text>
+          </View>
 
-              {/* Profissão */}
-              <Text style={styles.inputLabel}>
-                Profissão / O que você faz
+          <TouchableOpacity style={styles.addStoryBtn} onPress={handleAddStoryPhoto}>
+            <MaterialIcons name="add-photo-alternate" size={18} color="#4169E1" />
+            <Text style={styles.addStoryBtnText}>Publicar foto no story</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Card de seguidores / seguindo (próprio usuário) */}
+        <FollowStatsCard targetEmail={user.email} currentUserEmail={user.email} />
+
+        {/* Galeria */}
+        <ProfileGallery userEmail={user.email} currentUserEmail={user.email} />
+
+        {/* Comentários */}
+        <View style={styles.infoSection}>
+          <UserCommentsCard userEmail={user.email} />
+        </View>
+
+        {/* Info */}
+        <View style={styles.infoSection}>
+          <View style={[styles.infoCard, isDark && styles.darkCard]}>
+            <MaterialIcons name="verified-user" size={24} color="#4169E1" />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Status</Text>
+              <Text style={[styles.infoValue, isDark && styles.darkText]}>Conta Ativa</Text>
+            </View>
+          </View>
+          <View style={[styles.infoCard, isDark && styles.darkCard]}>
+            <MaterialIcons name="calendar-today" size={24} color="#4169E1" />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Membro desde</Text>
+              <Text style={[styles.infoValue, isDark && styles.darkText]}>
+                {new Date().toLocaleDateString("pt-BR")}
               </Text>
-              <View style={styles.inputContainer}>
-                <MaterialIcons
-                  name="work-outline"
-                  size={20}
-                  color="#999"
-                  style={{ marginRight: 10 }}
-                />
-                <TextInput
-                  style={styles.textInput}
-                  value={editProfession}
-                  onChangeText={setEditProfession}
-                  placeholder="Ex: Desenvolvedor, Designer, Estudante..."
-                  placeholderTextColor="#CCC"
-                  maxLength={60}
-                  editable={!isSaving}
-                />
-              </View>
-
-              {/* Foto URL */}
-              <Text style={styles.inputLabel}>Foto de perfil (URL)</Text>
-              <View
-                style={[
-                  styles.inputContainer,
-                  { alignItems: "flex-start", paddingTop: 14 },
-                ]}
-              >
-                <MaterialIcons
-                  name="link"
-                  size={20}
-                  color="#999"
-                  style={{ marginRight: 10, marginTop: 2 }}
-                />
-                <TextInput
-                  style={[styles.textInput, { minHeight: 44 }]}
-                  value={editPhotoUrl}
-                  onChangeText={(v) => {
-                    setEditPhotoUrl(v);
-                    setPhotoPreviewError(false);
-                  }}
-                  placeholder="https://exemplo.com/foto.jpg"
-                  placeholderTextColor="#CCC"
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  editable={!isSaving}
-                  multiline
-                />
-              </View>
-
-              {photoPreviewError && editPhotoUrl.trim().length > 0 && (
-                <Text style={styles.photoErrorText}>
-                  URL inválida ou imagem não carregou.
-                </Text>
-              )}
-
-              {editPhotoUrl.trim().length > 0 && (
-                <TouchableOpacity
-                  style={styles.removePhotoButton}
-                  onPress={handleRemovePhoto}
-                >
-                  <MaterialIcons
-                    name="delete-outline"
-                    size={16}
-                    color="#E63946"
-                  />
-                  <Text style={styles.removePhotoText}>Remover foto</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[
-                  styles.saveButton,
-                  isSaving && styles.saveButtonDisabled,
-                ]}
-                onPress={handleSaveProfile}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <Text style={styles.saveButtonText}>
-                    Salvar alterações
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
+            </View>
           </View>
         </View>
-      </Modal>
-    </ScrollView>
+
+        {/* Logout */}
+        <TouchableOpacity style={styles.logoutItem} onPress={handleLogout} disabled={isLoggingOut}>
+          {isLoggingOut ? (
+            <ActivityIndicator color="#E63946" size="small" />
+          ) : (
+            <MaterialIcons name="logout" size={22} color="#E63946" />
+          )}
+          <Text style={styles.logoutText}>
+            {isLoggingOut ? "Saindo..." : "Sair da Conta"}
+          </Text>
+          {!isLoggingOut && <MaterialIcons name="chevron-right" size={22} color="#E63946" />}
+        </TouchableOpacity>
+
+        <Text style={styles.footerText}>Versão 1.0.0</Text>
+
+        {/* Modal de edição */}
+        <Modal
+          visible={editModalVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => !isSaving && setEditModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Editar Perfil</Text>
+                <TouchableOpacity
+                  onPress={() => !isSaving && setEditModalVisible(false)}
+                  disabled={isSaving}
+                >
+                  <MaterialIcons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.modalAvatarArea}>
+                  {showPreview ? (
+                    <Image
+                      source={{ uri: previewUrl }}
+                      style={styles.modalAvatarImage}
+                      onError={() => setPhotoPreviewError(true)}
+                    />
+                  ) : (
+                    <View style={styles.modalAvatarPlaceholder}>
+                      <Text style={styles.modalAvatarInitial}>
+                        {(editName || user.name).charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <TouchableOpacity style={styles.galleryBtn} onPress={pickFromGallery}>
+                  <MaterialIcons name="photo-library" size={20} color="#FFF" />
+                  <Text style={styles.galleryBtnText}>Escolher da Galeria</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.inputLabel}>Nome</Text>
+                <View style={styles.inputContainer}>
+                  <MaterialIcons name="person" size={20} color="#999" style={{ marginRight: 10 }} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder="Seu nome"
+                    placeholderTextColor="#CCC"
+                    maxLength={50}
+                    editable={!isSaving}
+                  />
+                </View>
+
+                <Text style={styles.inputLabel}>Profissão / O que você faz</Text>
+                <View style={styles.inputContainer}>
+                  <MaterialIcons name="work-outline" size={20} color="#999" style={{ marginRight: 10 }} />
+                  <TextInput
+                    style={styles.textInput}
+                    value={editProfession}
+                    onChangeText={setEditProfession}
+                    placeholder="Ex: Desenvolvedor, Designer, Estudante..."
+                    placeholderTextColor="#CCC"
+                    maxLength={60}
+                    editable={!isSaving}
+                  />
+                </View>
+
+                <Text style={styles.inputLabel}>Foto de perfil (URL)</Text>
+                <View style={[styles.inputContainer, { alignItems: "flex-start", paddingTop: 14 }]}>
+                  <MaterialIcons name="link" size={20} color="#999" style={{ marginRight: 10, marginTop: 2 }} />
+                  <TextInput
+                    style={[styles.textInput, { minHeight: 44 }]}
+                    value={editPhotoUrl}
+                    onChangeText={(v) => {
+                      setEditPhotoUrl(v);
+                      setPhotoPreviewError(false);
+                    }}
+                    placeholder="https://exemplo.com/foto.jpg"
+                    placeholderTextColor="#CCC"
+                    autoCapitalize="none"
+                    keyboardType="url"
+                    editable={!isSaving}
+                    multiline
+                  />
+                </View>
+
+                {photoPreviewError && editPhotoUrl.trim().length > 0 && (
+                  <Text style={styles.photoErrorText}>URL inválida ou imagem não carregou.</Text>
+                )}
+
+                {editPhotoUrl.trim().length > 0 && (
+                  <TouchableOpacity style={styles.removePhotoButton} onPress={handleRemovePhoto}>
+                    <MaterialIcons name="delete-outline" size={16} color="#E63946" />
+                    <Text style={styles.removePhotoText}>Remover foto</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                  onPress={handleSaveProfile}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Salvar alterações</Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      </ScrollView>
       <FloatingMenu currentRoute="perfil" />
     </View>
   );
@@ -1292,16 +1244,10 @@ const styles = StyleSheet.create({
   darkCard: { backgroundColor: "#1E1E1E" },
   darkText: { color: "#FFF" },
   containerCenter: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F8F9FA",
+    flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F8F9FA",
   },
   loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F8F9FA",
+    flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F8F9FA",
   },
   loadingText: { fontSize: 16, color: "#666", marginTop: 10 },
   header: {
@@ -1334,26 +1280,42 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     elevation: 2,
   },
-  avatarWrapper: { marginBottom: 16 },
-  userName: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#212529",
-    marginBottom: 6,
-  },
-  professionRow: {
+  avatarWrapper: { marginBottom: 12 },
+
+  // ── Botão de seguir (estrela) ─────────────────────────────────────────────
+  followStarBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    marginBottom: 4,
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 9,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: "#4169E1",
+    backgroundColor: "#EEF2FF",
+    marginBottom: 10,
   },
+  followStarBtnActive: {
+    backgroundColor: "#FFF9E6",
+    borderColor: "#FFD700",
+  },
+  followStarText: { fontSize: 14, fontWeight: "700", color: "#4169E1" },
+  followStarTextActive: { color: "#B8860B" },
+  followersPill: {
+    backgroundColor: "#4169E1",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginLeft: 2,
+  },
+  followersPillText: { color: "#FFF", fontSize: 11, fontWeight: "800" },
+
+  userName: { fontSize: 24, fontWeight: "800", color: "#212529", marginBottom: 6 },
+  professionRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 },
   professionText: { fontSize: 13, fontWeight: "600", color: "#4169E1" },
   userEmail: { color: "#666", fontSize: 14, marginBottom: 16 },
   reactionContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 16,
+    flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16,
   },
   reactionButton: { padding: 6 },
   reactionCount: { fontWeight: "bold", color: "#333", fontSize: 15 },
@@ -1367,18 +1329,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   addStoryBtnText: { color: "#4169E1", fontWeight: "700", fontSize: 13 },
-  selfNote: {
-    marginTop: 12,
-    fontSize: 12,
-    color: "#AAA",
-    fontStyle: "italic",
-  },
-  notLoggedText: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 15,
-    marginBottom: 20,
-  },
+  selfNote: { marginTop: 12, fontSize: 12, color: "#AAA", fontStyle: "italic" },
+  notLoggedText: { fontSize: 16, color: "#666", marginTop: 15, marginBottom: 20 },
   loginButton: {
     backgroundColor: "#4169E1",
     paddingHorizontal: 30,
@@ -1409,24 +1361,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     elevation: 1,
   },
-  logoutText: {
-    marginLeft: 15,
-    fontSize: 16,
-    color: "#E63946",
-    fontWeight: "bold",
-    flex: 1,
-  },
-  footerText: {
-    fontSize: 12,
-    color: "#999",
-    textAlign: "center",
-    marginTop: 24,
-  },
-  // Modal edição
+  logoutText: { marginLeft: 15, fontSize: 16, color: "#E63946", fontWeight: "bold", flex: 1 },
+  footerText: { fontSize: 12, color: "#999", textAlign: "center", marginTop: 24 },
   modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
+    flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end",
   },
   modalContainer: {
     backgroundColor: "#FFF",
@@ -1446,12 +1384,9 @@ const styles = StyleSheet.create({
   modalAvatarArea: { alignItems: "center", marginBottom: 20 },
   modalAvatarImage: { width: 90, height: 90, borderRadius: 45 },
   modalAvatarPlaceholder: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 90, height: 90, borderRadius: 45,
     backgroundColor: "#4169E1",
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: "center", alignItems: "center",
   },
   modalAvatarInitial: { color: "#FFF", fontSize: 36, fontWeight: "bold" },
   galleryBtn: {
@@ -1465,21 +1400,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   galleryBtnText: { color: "#FFF", fontWeight: "600", fontSize: 14 },
-  presetRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
-  presetImg: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: "#EEE",
-  },
-  presetImgSelected: { borderColor: "#4169E1", borderWidth: 3 },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
-    marginBottom: 8,
-  },
+  inputLabel: { fontSize: 13, fontWeight: "600", color: "#666", marginBottom: 8 },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1492,12 +1413,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   textInput: { flex: 1, fontSize: 15, color: "#333" },
-  photoErrorText: {
-    fontSize: 12,
-    color: "#E63946",
-    marginBottom: 10,
-    marginLeft: 4,
-  },
+  photoErrorText: { fontSize: 12, color: "#E63946", marginBottom: 10, marginLeft: 4 },
   removePhotoButton: {
     flexDirection: "row",
     alignItems: "center",

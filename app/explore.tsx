@@ -18,6 +18,7 @@ import { useForum } from "../src/context/ForumContext";
 import { useAuth } from "../src/context/AuthContext";
 import MediaViewer from "../components/MediaViewer";
 import FloatingMenu from "../components/Floatingmenu";
+import { notifyFollowersForumRoom } from "../src/context/GalleryContext";
 
 const REACTIONS_KEY = "@App:articleReactions";
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -491,6 +492,8 @@ export default function ExploreScreen() {
         article.title || "Sem titulo", articleUrl, user.email || "",
         imageUrl, article.description || ""
       );
+      // Notifica seguidores que o usuário criou uma nova sala de fórum
+      await notifyFollowersForumRoom(user.email, user.name, newRoom.id);
       router.push(`/forum-room?roomId=${newRoom.id}`);
     }
   };
