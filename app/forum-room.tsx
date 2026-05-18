@@ -4,7 +4,6 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -35,6 +34,22 @@ function ArticleHeader({
   desc?: string;
   url?: string;
 }) {
+  const handleReadArticle = () => {
+    if (!url) return;
+    router.push({
+      pathname: "/explore",
+      params: {
+        title: title ?? "Sem título",
+        desc: desc ?? "",
+        image: image ?? "",
+        url,
+        source: "",
+        author: "",
+        category: "",
+      },
+    });
+  };
+
   return (
     <View style={articleStyles.container}>
       {/* Usa MediaViewer: detecta automaticamente YouTube, vídeo direto ou imagem */}
@@ -59,7 +74,7 @@ function ArticleHeader({
         {!!url && (
           <TouchableOpacity
             style={articleStyles.linkRow}
-            onPress={() => Linking.openURL(url)}
+            onPress={handleReadArticle}
             activeOpacity={0.7}
           >
             <MaterialIcons name="open-in-new" size={14} color="#4169E1" />

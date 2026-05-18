@@ -485,8 +485,6 @@ export default function HomeScreen() {
     );
   }
 
-  const firstName = user.name.trim().split(" ")[0] || "Usuário";
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -664,15 +662,24 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerGreeting}>Olá, {firstName}!</Text>
-          <Text style={styles.headerTitle}>Explore</Text>
+      {/* ── Topbar: stories + actions em uma linha ── */}
+      <View style={styles.topBar}>
+        {/* Stories (scroll horizontal ocupa o espaço restante) */}
+        <View style={styles.topBarStories}>
+          {user && (
+            <FollowingStories
+              currentUser={{
+                email: user.email,
+                name: user.name,
+                photo: user.photo,
+              }}
+              onAddPhoto={() => router.push("/perfil")}
+            />
+          )}
         </View>
 
-        <View style={styles.headerRight}>
-          {/* Atalho #info */}
+        {/* Botões à direita */}
+        <View style={styles.topBarActions}>
           <TouchableOpacity
             onPress={() => setShowDashboard(true)}
             style={styles.infoButton}
@@ -684,7 +691,7 @@ export default function HomeScreen() {
           <TouchableOpacity onPress={toggleMenu} style={styles.menuButton}>
             <MaterialIcons
               name={menuOpen ? "close" : "menu"}
-              size={28}
+              size={26}
               color="#4169E1"
             />
           </TouchableOpacity>
@@ -745,18 +752,6 @@ export default function HomeScreen() {
           <Text style={styles.menuOptionText}>Forum</Text>
         </TouchableOpacity>
       </Animated.View>
-
-      {/* ── Stories de quem o usuário segue ── */}
-      {user && (
-        <FollowingStories
-          currentUser={{
-            email: user.email,
-            name: user.name,
-            photo: user.photo,
-          }}
-          onAddPhoto={() => router.push("/perfil")}
-        />
-      )}
 
       {/* ── Search ── */}
       <View style={styles.searchContainer}>
@@ -1026,31 +1021,38 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8F9FA",
   },
   loadingText: { fontSize: 16, color: "#666", marginTop: 10 },
-  header: {
+  // ── Topbar compacta (stories + botões em uma linha) ───────────────────────
+  topBar: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 40,
-    marginBottom: 20,
+    marginTop: 14,
+    marginBottom: 10,
+    gap: 8,
   },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 4 },
+  topBarStories: {
+    flex: 1,
+    overflow: "hidden"
+  },
+  topBarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
   infoButton: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     justifyContent: "center",
     alignItems: "center",
     borderRadius: 10,
     backgroundColor: "#EEF2FF",
-    marginRight: 4,
   },
   menuButton: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     justifyContent: "center",
     alignItems: "center",
   },
-  headerGreeting: { fontSize: 14, color: "#999", marginBottom: 4 },
-  headerTitle: { fontSize: 32, fontWeight: "800", color: "#212529" },
   menuOverlay: {
     position: "absolute",
     top: 0,
@@ -1061,7 +1063,7 @@ const styles = StyleSheet.create({
   },
   expandedMenu: {
     position: "absolute",
-    top: 110,
+    top: 70,
     right: 20,
     backgroundColor: "#FFF",
     borderRadius: 15,

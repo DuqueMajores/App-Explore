@@ -126,7 +126,7 @@ export default function FollowingStories({
             userEmail={currentUser.email}
             userName={currentUser.name}
             userPhoto={currentUser.photo}
-            size={58}
+            size={42}
             isOwn
             onAddPhoto={handleAddStory}
             currentUserEmail={currentUser.email}
@@ -143,7 +143,7 @@ export default function FollowingStories({
               userEmail={u.email}
               userName={u.name}
               userPhoto={u.photo}
-              size={58}
+              size={42}
               currentUserEmail={currentUser.email}
             />
             <Text style={styles.storyLabel} numberOfLines={1}>
@@ -159,9 +159,8 @@ export default function FollowingStories({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: "#FFF",
-    borderRadius: 16,
-    marginBottom: 16,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 6,
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -169,21 +168,21 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    gap: 16,
+    paddingHorizontal: 10,
+    gap: 10,
     flexDirection: "row",
     alignItems: "flex-start",
   },
   storyItem: {
     alignItems: "center",
-    gap: 6,
-    width: 68,
+    gap: 3,
+    width: 48,
   },
   storyLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: "#555",
     textAlign: "center",
-    maxWidth: 66,
+    maxWidth: 48,
   },
 });
