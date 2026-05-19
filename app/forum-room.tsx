@@ -5,6 +5,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -21,6 +22,27 @@ import MediaViewer from "../components/MediaViewer";
 
 const PAGE_SIZE = 10;
 const TOP_COUNT = 3;
+
+// ── Share helper ──────────────────────────────────────────────────────────────
+async function shareArticle(title: string | undefined, url: string | undefined) {
+  const articleUrl = url ?? "";
+  const deepLink = articleUrl
+    ? `explore://article?url=${encodeURIComponent(articleUrl)}`
+    : "";
+  const message = [
+    title ?? "Confira esta notícia",
+    deepLink || articleUrl,
+    deepLink && articleUrl
+      ? `\nAinda não tem o app? Baixe e abra a notícia diretamente:\n${articleUrl}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  try {
+    await Share.share({ message, url: articleUrl });
+  } catch (_) {}
+}
 
 // ── Article Header ─────────────────────────────────────────────────────────────
 function ArticleHeader({
@@ -52,15 +74,24 @@ function ArticleHeader({
 
   return (
     <View style={articleStyles.container}>
-      {/* Usa MediaViewer: detecta automaticamente YouTube, vídeo direto ou imagem */}
-      <MediaViewer
-        imageUrl={image}
-        articleUrl={url}
-        height={200}
-        showBadge={true}
-        autoPlay={false}
-        style={articleStyles.mediaContainer}
-      />
+      {/* Imagem com botão de compartilhar sobreposto */}
+      <View style={articleStyles.mediaWrapper}>
+        <MediaViewer
+          imageUrl={image}
+          articleUrl={url}
+          height={200}
+          showBadge={true}
+          autoPlay={false}
+          style={articleStyles.mediaContainer}
+        />
+        <TouchableOpacity
+          style={articleStyles.shareOverlayBtn}
+          activeOpacity={0.8}
+          onPress={() => shareArticle(title, url)}
+        >
+          <MaterialIcons name="share" size={18} color="#FFF" />
+        </TouchableOpacity>
+      </View>
 
       <View style={articleStyles.body}>
         <Text style={articleStyles.title} numberOfLines={3}>
@@ -72,14 +103,25 @@ function ArticleHeader({
           </Text>
         )}
         {!!url && (
-          <TouchableOpacity
-            style={articleStyles.linkRow}
-            onPress={handleReadArticle}
-            activeOpacity={0.7}
-          >
-            <MaterialIcons name="open-in-new" size={14} color="#4169E1" />
-            <Text style={articleStyles.linkText}>Ler artigo completo</Text>
-          </TouchableOpacity>
+          <View style={articleStyles.actionRow}>
+            <TouchableOpacity
+              style={articleStyles.linkRow}
+              onPress={handleReadArticle}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="open-in-new" size={14} color="#4169E1" />
+              <Text style={articleStyles.linkText}>Ler artigo completo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={articleStyles.shareLinkBtn}
+              onPress={() => shareArticle(title, url)}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="share" size={14} color="#4169E1" />
+              <Text style={articleStyles.linkText}>Compartilhar</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
       <View style={articleStyles.divider} />
@@ -653,10 +695,26 @@ export default function ForumRoomScreen() {
 
 const articleStyles = StyleSheet.create({
   container: { marginBottom: 16 },
+  mediaWrapper: {
+    position: "relative",
+    marginBottom: 14,
+  },
   mediaContainer: {
     borderRadius: 16,
     overflow: "hidden",
-    marginBottom: 14,
+  },
+  shareOverlayBtn: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
   },
   body: { paddingHorizontal: 2 },
   title: {
@@ -672,11 +730,21 @@ const articleStyles = StyleSheet.create({
     color: "#666",
     marginBottom: 10,
   },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
   linkRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    marginBottom: 4,
+  },
+  shareLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
   linkText: {
     fontSize: 13,

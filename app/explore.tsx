@@ -7,6 +7,7 @@ import {
   Linking,
   PanResponder,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -66,6 +67,29 @@ function extractJson(text: string): { favor: string; contra: string } {
   const match = text.match(/\{[\s\S]*\}/);
   if (match) { try { return JSON.parse(match[0]); } catch {} }
   throw new Error("JSON parse failed");
+}
+
+// ── Share helper ──────────────────────────────────────────────────────────────
+// Deep-link: explore://article?url=... — se o app não estiver instalado o SO
+// cai no fallback (URL original da notícia no navegador).
+async function shareArticle(title: string | null | undefined, url: string | null | undefined) {
+  const articleUrl = url ?? "";
+  const deepLink = articleUrl
+    ? `explore://article?url=${encodeURIComponent(articleUrl)}`
+    : "";
+  const message = [
+    title ?? "Confira esta notícia",
+    deepLink || articleUrl,
+    deepLink && articleUrl
+      ? `\nAinda não tem o app? Baixe e abra a notícia diretamente:\n${articleUrl}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  try {
+    await Share.share({ message, url: articleUrl });
+  } catch (_) {}
 }
 
 async function saveReaction(
@@ -174,10 +198,19 @@ function ArticleContent({
     <ScrollView
       style={styles.scrollView}
       showsVerticalScrollIndicator={false}
-      // Prevent the inner scroll from stealing the parent pan gesture
       scrollEventThrottle={16}
     >
-      <MediaViewer imageUrl={imageUrl} articleUrl={articleUrl} height={300} showBadge autoPlay={false} />
+      {/* ── Imagem / vídeo com botão de compartilhar sobreposto ── */}
+      <View style={{ position: "relative" }}>
+        <MediaViewer imageUrl={imageUrl} articleUrl={articleUrl} height={300} showBadge autoPlay={false} />
+        <TouchableOpacity
+          style={styles.shareOverlayBtn}
+          activeOpacity={0.8}
+          onPress={() => shareArticle(article.title, articleUrl)}
+        >
+          <MaterialIcons name="share" size={20} color="#FFF" />
+        </TouchableOpacity>
+      </View>
       <View style={styles.content}>
         <Text style={styles.sourceBadge}>{article.source?.name || "Fonte"}</Text>
         <Text style={styles.headline}>{article.title || "Sem titulo"}</Text>
@@ -642,6 +675,22 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   counterText: { color: "#FFF", fontSize: 12, fontWeight: "700" },
+
+  // ── Share overlay button ──────────────────────────────────────────────────
+  shareOverlayBtn: {
+    position: "absolute",
+    top: 220,
+    bottom: 12,
+    right: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
 
   // ── Article content ───────────────────────────────────────────────────────
   sourceBadge: { color: "#E63946", fontWeight: "bold", fontSize: 13, marginBottom: 12 },
