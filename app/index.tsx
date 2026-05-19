@@ -304,9 +304,7 @@ export default function HomeScreen() {
       const queryTerm = queryOverride !== undefined ? queryOverride : search;
       if (!queryTerm.trim() && articles.length > 0) return;
 
-      const resolvedKey = (process.env.EXPO_PUBLIC_NEWS_API_KEY ?? "")
-        .replace(/["\s;]/g, "")
-        .trim();
+      const resolvedKey = (process.env.EXPO_PUBLIC_NEWS_API_KEY ?? "").trim();
 
       if (!resolvedKey) {
         Alert.alert(
