@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Explore",
+    "slug": "explore",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/explore.png",
+    "scheme": "explore",
+    "userInterfaceStyle": "automatic",
+    
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/explore.png",
+        "backgroundColor": "#E6F4FE"
+      },
+      
+      "predictiveBackGestureEnabled": false,
+      "package": "com.moisesdamasceno.explore"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon_news.png"
+    },
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6712c15e-dfbf-40e2-a561-bfb8108663ec"
+      }
+    },
+    "owner": "moisesdamasceno",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6712c15e-dfbf-40e2-a561-bfb8108663ec"
+    },
+    "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-2727232322523464~2165400426",
+          "iosAppId": "ca-app-pub-2727232322523464~2165400426"
+        }
+      ]
+    ]
+  }
+}
