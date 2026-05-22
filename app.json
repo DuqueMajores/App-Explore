@@ -1,5 +1,14 @@
 {
   "expo": {
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-2727232322523464~3370670885"
+        }
+      ]
+    ],
     "name": "Explore",
     "slug": "explore",
     "version": "1.0.0",
@@ -7,7 +16,6 @@
     "icon": "./assets/images/explore.png",
     "scheme": "explore",
     "userInterfaceStyle": "automatic",
-    
     "ios": {
       "supportsTablet": true
     },
@@ -16,7 +24,6 @@
         "foregroundImage": "./assets/images/explore.png",
         "backgroundColor": "#E6F4FE"
       },
-      
       "predictiveBackGestureEnabled": false,
       "package": "com.moisesdamasceno.explore"
     },

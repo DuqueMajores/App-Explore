@@ -1,4 +1,5 @@
 import { View, Text } from "react-native";
+import { BannerAd, BannerAdSize, TestIds } from "react-native-google-mobile-ads";
 
 export default function AdBanner() {
   return (
@@ -12,7 +13,16 @@ export default function AdBanner() {
         top: -10
       }}
     >
-      <Text style={{ fontSize: 12 }}>Publicidade</Text>
+      <BannerAd
+        unitId={TestIds.BANNER}
+        size={BannerAdSize.INLINE_ADAPTIVE_BANNER}
+        requestOptions={{
+          requestNonPersonalizedAdsOnly: true,
+          networkExtras: {
+            collapsible:"bottom",
+          },
+        }}
+      />
     </View>
   );
 }
