@@ -1,14 +1,24 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
+import {
+  db,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  getDocs,
+  collection,
+} from "../services/firebaseConfig";
 
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 interface User {
   name: string;
   email: string;
   photo?: string;
-  profession?: string; // o que o usuário faz/trabalha
-  likes: string[];    // e-mails de quem curtiu este perfil
-  dislikes: string[]; // e-mails de quem não curtiu
+  profession?: string;
+  likes: string[];
+  dislikes: string[];
   ttsEnabled: boolean;
   darkMode: boolean;
 }
@@ -30,8 +40,16 @@ interface AuthContextData {
     targetEmail: string,
     type: "like" | "dislike"
   ) => Promise<void>;
+  addReputation?: (email: string, delta: number, reason: string) => Promise<void>;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const LOCAL_KEY = "@App:user";
+
+/** Referência ao documento do usuário no Firestore */
+const userRef = (email: string) => doc(db, "users", email);
+
+// ── Context ───────────────────────────────────────────────────────────────────
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -40,170 +58,171 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ── Carregar usuário salvo ──
+  // ── Carrega cache local ao iniciar ─────────────────────────────────────────
   useEffect(() => {
-    async function loadData() {
+    (async () => {
       try {
-        const stored = await AsyncStorage.getItem("@App:user");
-        if (stored) setUser(JSON.parse(stored));
+        const cached = await AsyncStorage.getItem(LOCAL_KEY);
+        if (cached) setUser(JSON.parse(cached));
       } catch (e) {
-        console.error("Erro ao carregar usuário:", e);
+        console.error("Erro ao carregar cache local:", e);
       } finally {
         setLoading(false);
       }
-    }
-    loadData();
+    })();
   }, []);
 
-  // ── Persiste no estado e no storage ──
-  const saveAndSetUser = async (userData: User) => {
+  // ── Persiste localmente e atualiza estado ──────────────────────────────────
+  const applyUser = async (userData: User) => {
     setUser(userData);
-    await AsyncStorage.setItem("@App:user", JSON.stringify(userData));
-    // Atualizar na lista global de usuários
-    const all = await AsyncStorage.getItem("@App:users");
-    const users: StoredUser[] = all ? JSON.parse(all) : [];
-    const updated = users.map((u) =>
-      u.email === userData.email ? { ...u, ...userData } : u
-    );
-    await AsyncStorage.setItem("@App:users", JSON.stringify(updated));
+    await AsyncStorage.setItem(LOCAL_KEY, JSON.stringify(userData));
   };
 
-  // ── Login ──
+  // ── Sincroniza campos públicos no Firestore ────────────────────────────────
+  const syncToFirestore = async (userData: Partial<StoredUser> & { email: string }) => {
+    const ref = userRef(userData.email);
+    await setDoc(ref, userData, { merge: true });
+  };
+
+  // ── Atualiza o comentários de fórum com nova foto/nome (Firestore) ─────────
+  const syncForumComments = async (email: string, name: string, photo: string) => {
+    try {
+      const roomsSnap = await getDocs(collection(db, "forumRooms"));
+      const batch: Promise<void>[] = [];
+      roomsSnap.forEach((roomDoc) => {
+        const room = roomDoc.data();
+        if (!room.comments) return;
+        const updatedComments = room.comments.map((c: any) =>
+          c.userEmail === email
+            ? { ...c, userPhoto: photo, userName: name }
+            : c
+        );
+        batch.push(updateDoc(roomDoc.ref, { comments: updatedComments }));
+      });
+      await Promise.all(batch);
+    } catch (e) {
+      console.error("Erro ao sincronizar fórum:", e);
+    }
+  };
+
+  // ── Login ──────────────────────────────────────────────────────────────────
   async function signIn(email: string, password: string) {
-    const all = await AsyncStorage.getItem("@App:users");
-    const users: StoredUser[] = all ? JSON.parse(all) : [];
-    const found = users.find((u) => u.email === email.toLowerCase().trim());
-    if (!found) throw new Error("Usuário não encontrado.");
-    // Em produção compare hashes; aqui aceitamos qualquer senha para o protótipo
-    const { passwordHash, ...userData } = found;
-    await saveAndSetUser(userData);
+    const normalizedEmail = email.toLowerCase().trim();
+    const snap = await getDoc(userRef(normalizedEmail));
+    if (!snap.exists()) throw new Error("Usuário não encontrado.");
+
+    const data = snap.data() as StoredUser;
+    // ⚠️  Em produção use Firebase Auth ou compare hash com bcrypt
+    if (data.passwordHash !== password)
+      throw new Error("Senha incorreta.");
+
+    const { passwordHash, ...userData } = data;
+    await applyUser(userData);
   }
 
-  // ── Cadastro ──
+  // ── Cadastro ───────────────────────────────────────────────────────────────
   async function signUp(name: string, email: string, password: string) {
-    const all = await AsyncStorage.getItem("@App:users");
-    const users: StoredUser[] = all ? JSON.parse(all) : [];
-
-    const alreadyExists = users.some(
-      (u) => u.email === email.toLowerCase().trim()
-    );
-    if (alreadyExists) throw new Error("Este e-mail já está cadastrado.");
+    const normalizedEmail = email.toLowerCase().trim();
+    const snap = await getDoc(userRef(normalizedEmail));
+    if (snap.exists()) throw new Error("Este e-mail já está cadastrado.");
 
     const newUser: StoredUser = {
       name: name.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       photo: "",
       profession: "",
       likes: [],
       dislikes: [],
       ttsEnabled: false,
       darkMode: false,
-      passwordHash: password, // em produção use bcrypt ou similar
+      passwordHash: password,
     };
-    users.push(newUser);
-    await AsyncStorage.setItem("@App:users", JSON.stringify(users));
+
+    await setDoc(userRef(normalizedEmail), newUser);
     const { passwordHash, ...userData } = newUser;
-    await saveAndSetUser(userData);
+    await applyUser(userData);
   }
 
-  // ── Logout ──
+  // ── Logout ─────────────────────────────────────────────────────────────────
   async function signOut() {
-    await AsyncStorage.removeItem("@App:user");
+    await AsyncStorage.removeItem(LOCAL_KEY);
     setUser(null);
   }
 
-  // ── Atualizar perfil ──
+  // ── Atualizar perfil ───────────────────────────────────────────────────────
   async function updateProfile(name: string, photo?: string, profession?: string) {
     if (!user) return;
-    const newPhoto = photo ?? user.photo;
-    const newProfession = profession !== undefined ? profession : user.profession;
-    await saveAndSetUser({ ...user, name: name.trim(), photo: newPhoto, profession: newProfession });
-
-    // Sincroniza foto e nome nos comentários do fórum
-    try {
-      const storedForum = await AsyncStorage.getItem("@Forum:rooms");
-      if (storedForum) {
-        const rooms = JSON.parse(storedForum);
-        const updatedRooms = rooms.map((room: any) => ({
-          ...room,
-          comments: room.comments.map((comment: any) =>
-            comment.userEmail === user.email
-              ? { ...comment, userPhoto: newPhoto, userName: name.trim() }
-              : comment
-          ),
-        }));
-        await AsyncStorage.setItem("@Forum:rooms", JSON.stringify(updatedRooms));
-      }
-    } catch (e) {
-      console.error("Erro ao sincronizar foto no fórum:", e);
-    }
+    const updated: User = {
+      ...user,
+      name: name.trim(),
+      photo: photo ?? user.photo,
+      profession: profession !== undefined ? profession : user.profession,
+    };
+    await applyUser(updated);
+    await syncToFirestore({ ...updated });
+    await syncForumComments(user.email, updated.name, updated.photo ?? "");
   }
 
-  // ── TTS toggle ──
+  // ── TTS ────────────────────────────────────────────────────────────────────
   const toggleTTS = async () => {
-    if (user) await saveAndSetUser({ ...user, ttsEnabled: !user.ttsEnabled });
+    if (!user) return;
+    const updated = { ...user, ttsEnabled: !user.ttsEnabled };
+    await applyUser(updated);
+    await updateDoc(userRef(user.email), { ttsEnabled: updated.ttsEnabled });
   };
 
-  // ── Dark mode toggle ──
+  // ── Dark mode ──────────────────────────────────────────────────────────────
   const toggleTheme = async () => {
-    if (user) await saveAndSetUser({ ...user, darkMode: !user.darkMode });
+    if (!user) return;
+    const updated = { ...user, darkMode: !user.darkMode };
+    await applyUser(updated);
+    await updateDoc(userRef(user.email), { darkMode: updated.darkMode });
   };
 
-  // ── Reações no perfil ──
+  // ── Reações no perfil ──────────────────────────────────────────────────────
   const handleProfileReaction = async (
     targetEmail: string,
     type: "like" | "dislike"
   ) => {
     if (!user) return;
-    const all = await AsyncStorage.getItem("@App:users");
-    const users: StoredUser[] = all ? JSON.parse(all) : [];
 
+    const ref = userRef(targetEmail);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+
+    const target = snap.data() as StoredUser;
+    let likeList: string[] = [...(target.likes ?? [])];
+    let dislikeList: string[] = [...(target.dislikes ?? [])];
     let isAdding = false;
 
-    const updated = users.map((u) => {
-      if (u.email !== targetEmail) return u;
-      const likeList = [...(u.likes ?? [])];
-      const dislikeList = [...(u.dislikes ?? [])];
-
-      if (type === "like") {
-        const idx = likeList.indexOf(user.email);
-        if (idx >= 0) {
-          likeList.splice(idx, 1);
-          isAdding = false;
-        } else {
-          likeList.push(user.email);
-          isAdding = true;
-          const di = dislikeList.indexOf(user.email);
-          if (di >= 0) dislikeList.splice(di, 1);
-        }
-      } else {
-        const idx = dislikeList.indexOf(user.email);
-        if (idx >= 0) {
-          dislikeList.splice(idx, 1);
-          isAdding = false;
-        } else {
-          dislikeList.push(user.email);
-          isAdding = true;
-          const li = likeList.indexOf(user.email);
-          if (li >= 0) likeList.splice(li, 1);
-        }
+    if (type === "like") {
+      const idx = likeList.indexOf(user.email);
+      if (idx >= 0) { likeList.splice(idx, 1); isAdding = false; }
+      else {
+        likeList.push(user.email); isAdding = true;
+        const di = dislikeList.indexOf(user.email);
+        if (di >= 0) dislikeList.splice(di, 1);
       }
-      return { ...u, likes: likeList, dislikes: dislikeList };
-    });
+    } else {
+      const idx = dislikeList.indexOf(user.email);
+      if (idx >= 0) { dislikeList.splice(idx, 1); isAdding = false; }
+      else {
+        dislikeList.push(user.email); isAdding = true;
+        const li = likeList.indexOf(user.email);
+        if (li >= 0) likeList.splice(li, 1);
+      }
+    }
 
-    await AsyncStorage.setItem("@App:users", JSON.stringify(updated));
+    await updateDoc(ref, { likes: likeList, dislikes: dislikeList });
 
-    // Notifica o dono do perfil (apenas ao adicionar reação, não ao remover,
-    // e nunca quando o usuário reage ao próprio perfil)
+    // Notifica o dono do perfil
     if (isAdding && targetEmail !== user.email) {
       try {
         const { status } = await Notifications.getPermissionsAsync();
         if (status === "granted") {
           await Notifications.scheduleNotificationAsync({
             content: {
-              title: type === "like"
-                ? "👍 Novo like no seu perfil!"
-                : "👎 Novo dislike no seu perfil",
+              title: type === "like" ? "👍 Novo like no seu perfil!" : "👎 Novo dislike",
               body: type === "like"
                 ? `${user.name} curtiu o seu perfil.`
                 : `${user.name} deu dislike no seu perfil.`,
@@ -213,20 +232,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             trigger: null,
           });
         }
-      } catch (e) {
-        console.error("Erro ao notificar reação no perfil:", e);
-      }
+      } catch (e) { console.error("Erro ao notificar:", e); }
     }
 
-    // Se o alvo é o próprio usuário logado, atualiza o estado local também
+    // Se o alvo é o próprio usuário logado, atualiza estado local
     if (targetEmail === user.email) {
-      const current = updated.find((u) => u.email === user.email);
-      if (current) {
-        const { passwordHash, ...userData } = current;
-        setUser(userData);
-        await AsyncStorage.setItem("@App:user", JSON.stringify(userData));
-      }
+      const updated = { ...user, likes: likeList, dislikes: dislikeList };
+      await applyUser(updated);
     }
+  };
+
+  // ── addReputation (stub compatível com ForumContext) ───────────────────────
+  const addReputation = async (email: string, delta: number, reason: string) => {
+    // Implementação futura: campo "reputation" no Firestore
+    console.log(`[reputation] ${email} ${delta > 0 ? "+" : ""}${delta} — ${reason}`);
   };
 
   return (
@@ -241,6 +260,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         toggleTTS,
         toggleTheme,
         handleProfileReaction,
+        addReputation,
       }}
     >
       {children}
