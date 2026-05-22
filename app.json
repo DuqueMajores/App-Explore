@@ -7,7 +7,7 @@
     "icon": "./assets/images/explore.png",
     "scheme": "explore",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    
     "ios": {
       "supportsTablet": true
     },
@@ -16,7 +16,7 @@
         "foregroundImage": "./assets/images/explore.png",
         "backgroundColor": "#E6F4FE"
       },
-      "edgeToEdgeEnabled": true,
+      
       "predictiveBackGestureEnabled": false,
       "package": "com.moisesdamasceno.explore"
     },
