@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Platform } from 'react-native';
+import { View } from 'react-native';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 
-const adUnitId = __DEV__ ? TestIds.BANNER : (Platform.OS === 'ios' ? 'ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy' : 'ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy');
+// ID de bloco de anúncios fornecido pelo usuário
+const adUnitId = __DEV__ ? TestIds.BANNER : 'ca-app-pub-2727232322523464/3370670885';
 
 export default function AdBanner() {
   return (
