@@ -6,11 +6,12 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import IntroScreen from "../components/IntroScreen";
 import AdBanner from "../components/AdBanner";
 
-import { AuthProvider } from "../src/context/AuthContext";
-import { ForumProvider } from "../src/context/ForumContext";
+import { AuthProvider }        from "../src/context/AuthContext";
+import { ForumProvider }       from "../src/context/ForumContext";
 import { NotificationProvider } from "../src/context/NotificationContext";
-import { GalleryProvider } from "../src/context/GalleryContext";
-import { FollowProvider } from "../src/context/FollowContext";
+import { GalleryProvider }     from "../src/context/GalleryContext";
+import { FollowProvider }      from "../src/context/FollowContext";
+import { ReactionsProvider }   from "../src/context/ReactionsContext";
 
 export default function RootLayout() {
   const [introFinished, setIntroFinished] = useState(false);
@@ -29,33 +30,31 @@ export default function RootLayout() {
       <NotificationProvider>
         <AuthProvider>
           <FollowProvider>
-            <ForumProvider>
-              <GalleryProvider>
-                <View style={styles.container}>
-                  <SafeAreaView style={styles.safe}>
-                    <StatusBar barStyle="light-content" />
+            <ReactionsProvider>
+              <ForumProvider>
+                <GalleryProvider>
+                  <View style={styles.container}>
+                    <SafeAreaView style={styles.safe}>
+                      <StatusBar barStyle="light-content" />
 
-                    <Stack
-                      screenOptions={{
-                        headerShown: false,
-                      }}
-                    >
-                      <Stack.Screen name="index" />
-                      <Stack.Screen name="login" />
-                      <Stack.Screen name="perfil" />
-                      <Stack.Screen name="rede" options={{ title: "Rede" }} />
-                      <Stack.Screen name="explore" />
-                      <Stack.Screen name="forum" />
-                      <Stack.Screen name="forum-room" />
-                      <Stack.Screen name="acessibilidade" />
-                      <Stack.Screen name="galerias" />
-                    </Stack>
+                      <Stack screenOptions={{ headerShown: false }}>
+                        <Stack.Screen name="index" />
+                        <Stack.Screen name="login" />
+                        <Stack.Screen name="perfil" />
+                        <Stack.Screen name="rede" options={{ title: "Rede" }} />
+                        <Stack.Screen name="explore" />
+                        <Stack.Screen name="forum" />
+                        <Stack.Screen name="forum-room" />
+                        <Stack.Screen name="acessibilidade" />
+                        <Stack.Screen name="galerias" />
+                      </Stack>
 
-                    <AdBanner />
-                  </SafeAreaView>
-                </View>
-              </GalleryProvider>
-            </ForumProvider>
+                      <AdBanner />
+                    </SafeAreaView>
+                  </View>
+                </GalleryProvider>
+              </ForumProvider>
+            </ReactionsProvider>
           </FollowProvider>
         </AuthProvider>
       </NotificationProvider>
@@ -64,11 +63,6 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  safe: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: "#000" },
+  safe: { flex: 1 },
 });

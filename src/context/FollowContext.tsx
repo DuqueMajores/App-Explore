@@ -1,10 +1,12 @@
 /**
- * FollowContext.tsx
- * Gerencia o sistema de seguidores (follow/unfollow).
+ * FollowContext.tsx — migrado para Firebase Firestore
  *
- * Estrutura de dados no AsyncStorage:
- *   @Follow:data  →  Record<followerEmail, followingEmail[]>
- *   (quem segue quem — "followerEmail segue followingEmail[]")
+ * Coleção: "follows"
+ *   Documento: followerEmail  (um doc por usuário que segue alguém)
+ *   Campos:    following: string[]  (e-mails de quem ele segue)
+ *
+ * Listener em tempo real mantém todos os clientes sincronizados sem
+ * precisar de AsyncStorage.
  */
 
 import React, {
@@ -14,10 +16,18 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  db,
+  collection,
+  doc,
+  setDoc,
+  getDocs,
+} from "../services/firebaseConfig";
+import { onSnapshot } from "firebase/firestore";
 
-const STORAGE_KEY = "@Follow:data";
+const FOLLOW_COLLECTION = "follows";
 
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 interface FollowContextData {
   /** Retorna true se currentUser segue targetEmail */
   isFollowing: (currentUserEmail: string, targetEmail: string) => boolean;
@@ -29,61 +39,80 @@ interface FollowContextData {
   getFollowers: (targetEmail: string) => string[];
   /** Total de seguidores de targetEmail */
   followersCount: (targetEmail: string) => number;
-  /** Carregado do storage? */
+  /** Carregado do Firestore? */
   ready: boolean;
 }
 
 const FollowContext = createContext<FollowContextData>({} as FollowContextData);
 
-export const FollowProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// ── Provider ──────────────────────────────────────────────────────────────────
+export const FollowProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   // followMap[followerEmail] = string[] de quem ele segue
   const [followMap, setFollowMap] = useState<Record<string, string[]>>({});
   const [ready, setReady] = useState(false);
 
+  // ── Listener em tempo real ─────────────────────────────────────────────────
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
-        if (stored) setFollowMap(JSON.parse(stored));
-      })
-      .catch(() => {})
-      .finally(() => setReady(true));
+    const unsub = onSnapshot(
+      collection(db, FOLLOW_COLLECTION),
+      (snapshot) => {
+        const map: Record<string, string[]> = {};
+        snapshot.docs.forEach((d) => {
+          const data = d.data() as { following?: string[] };
+          map[d.id] = data.following ?? [];
+        });
+        setFollowMap(map);
+        setReady(true);
+      },
+      (error) => {
+        console.error("Erro ao ouvir follows:", error);
+        setReady(true);
+      }
+    );
+
+    return () => unsub();
   }, []);
 
-  const persist = useCallback(async (map: Record<string, string[]>) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-  }, []);
-
+  // ── isFollowing ────────────────────────────────────────────────────────────
   const isFollowing = useCallback(
-    (currentUserEmail: string, targetEmail: string) => {
-      return (followMap[currentUserEmail] ?? []).includes(targetEmail);
-    },
+    (currentUserEmail: string, targetEmail: string) =>
+      (followMap[currentUserEmail] ?? []).includes(targetEmail),
     [followMap]
   );
 
+  // ── toggleFollow ───────────────────────────────────────────────────────────
   const toggleFollow = useCallback(
     async (currentUserEmail: string, targetEmail: string): Promise<boolean> => {
       const current = followMap[currentUserEmail] ?? [];
       const alreadyFollowing = current.includes(targetEmail);
+      const updated = alreadyFollowing
+        ? current.filter((e) => e !== targetEmail)
+        : [...current, targetEmail];
 
-      const updated: Record<string, string[]> = {
-        ...followMap,
-        [currentUserEmail]: alreadyFollowing
-          ? current.filter((e) => e !== targetEmail)
-          : [...current, targetEmail],
-      };
+      // Atualiza otimisticamente no estado local
+      setFollowMap((prev) => ({ ...prev, [currentUserEmail]: updated }));
 
-      setFollowMap(updated);
-      await persist(updated);
-      return !alreadyFollowing; // true = agora está seguindo
+      // Persiste no Firestore (merge para não sobrescrever outros campos)
+      await setDoc(
+        doc(db, FOLLOW_COLLECTION, currentUserEmail),
+        { following: updated },
+        { merge: true }
+      );
+
+      return !alreadyFollowing;
     },
-    [followMap, persist]
+    [followMap]
   );
 
+  // ── getFollowing ───────────────────────────────────────────────────────────
   const getFollowing = useCallback(
     (currentUserEmail: string) => followMap[currentUserEmail] ?? [],
     [followMap]
   );
 
+  // ── getFollowers ───────────────────────────────────────────────────────────
   const getFollowers = useCallback(
     (targetEmail: string) =>
       Object.entries(followMap)
@@ -92,6 +121,7 @@ export const FollowProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [followMap]
   );
 
+  // ── followersCount ─────────────────────────────────────────────────────────
   const followersCount = useCallback(
     (targetEmail: string) => getFollowers(targetEmail).length,
     [getFollowers]
