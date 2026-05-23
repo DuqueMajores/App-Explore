@@ -1,3 +1,15 @@
+/**
+ * ForumContext.tsx — migrado para Firebase Firestore
+ *
+ * Coleção: "forumRooms"
+ *   Documento: room.id (gerado localmente)
+ *   Campos:    id, articleTitle, articleUrl, articleImage, articleDesc,
+ *              createdBy, createdAt, comments[]
+ *
+ * Os comentários são armazenados como array dentro do documento da sala.
+ * Para salas com muitos comentários, considere uma sub-coleção futuramente.
+ */
+
 import React, {
   createContext,
   useState,
@@ -5,17 +17,27 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  db,
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+} from "../services/firebaseConfig";
+import { onSnapshot } from "firebase/firestore";
 
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 export interface ForumComment {
   id: string;
   text: string;
   userName: string;
   userEmail: string;
-  userPhoto?: string;   // foto de perfil do autor
+  userPhoto?: string;
   createdAt: string;
   parentId: string | null;
-  likes: string[]; // array de emails que curtiram
+  likes: string[];
 }
 
 export interface ForumRoom {
@@ -55,51 +77,61 @@ interface ForumContextData {
   ) => Promise<{ wasLiked: boolean; commentOwnerEmail: string }>;
 }
 
-const STORAGE_KEY = "@Forum:rooms";
-const ForumContext = createContext<ForumContextData>({} as ForumContextData);
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const ROOMS_COLLECTION = "forumRooms";
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
+
+const roomRef = (roomId: string) => doc(db, ROOMS_COLLECTION, roomId);
+
+// ── Context ───────────────────────────────────────────────────────────────────
+const ForumContext = createContext<ForumContextData>({} as ForumContextData);
 
 export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [rooms, setRooms] = useState<ForumRoom[]>([]);
 
+  // ── Listener em tempo real ─────────────────────────────────────────────────
   useEffect(() => {
-    async function loadRooms() {
-      try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed: ForumRoom[] = JSON.parse(stored);
-          // migração: garantir que comentários antigos tenham likes
-          const migrated = parsed.map((room) => ({
-            ...room,
-            comments: room.comments.map((c) => ({ likes: [], ...c })),
-          }));
-          setRooms(migrated);
-        }
-      } catch (error) {
-        console.error("Erro ao carregar salas do forum:", error);
+    const unsub = onSnapshot(
+      collection(db, ROOMS_COLLECTION),
+      (snapshot) => {
+        const fetched: ForumRoom[] = snapshot.docs.map((d) => {
+          const data = d.data() as ForumRoom;
+          // Garante migração de comentários antigos sem likes
+          return {
+            ...data,
+            comments: (data.comments ?? []).map((c) => ({
+              ...c,
+              likes: (c as ForumComment).likes ?? [],
+            })),
+          };
+        });
+        // Ordena por data de criação (mais recente primeiro)
+        fetched.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setRooms(fetched);
+      },
+      (error) => {
+        console.error("Erro ao ouvir salas do fórum:", error);
       }
-    }
-    loadRooms();
+    );
+
+    return () => unsub();
   }, []);
 
-  const persistRooms = useCallback(async (updatedRooms: ForumRoom[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedRooms));
-    } catch (error) {
-      console.error("Erro ao salvar salas do forum:", error);
-    }
-  }, []);
-
+  // ── getRoomByArticleUrl ────────────────────────────────────────────────────
   const getRoomByArticleUrl = useCallback(
     (url: string) => rooms.find((r) => r.articleUrl === url),
     [rooms]
   );
 
+  // ── createRoom ─────────────────────────────────────────────────────────────
   const createRoom = useCallback(
     async (
       articleTitle: string,
@@ -112,20 +144,20 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({
         id: generateId(),
         articleTitle,
         articleUrl,
-        articleImage,
-        articleDesc,
+        articleImage: articleImage ?? "",
+        articleDesc: articleDesc ?? "",
         createdBy: createdByEmail,
         createdAt: new Date().toISOString(),
         comments: [],
       };
-      const updatedRooms = [...rooms, newRoom];
-      setRooms(updatedRooms);
-      await persistRooms(updatedRooms);
+
+      await setDoc(roomRef(newRoom.id), newRoom);
       return newRoom;
     },
-    [rooms, persistRooms]
+    []
   );
 
+  // ── addComment ─────────────────────────────────────────────────────────────
   const addComment = useCallback(
     async (
       roomId: string,
@@ -135,67 +167,61 @@ export const ForumProvider: React.FC<{ children: React.ReactNode }> = ({
       userPhoto: string | undefined,
       parentId: string | null
     ): Promise<void> => {
+      const room = rooms.find((r) => r.id === roomId);
+      if (!room) throw new Error("Sala não encontrada.");
+
       const newComment: ForumComment = {
         id: generateId(),
         text,
         userName,
         userEmail,
-        userPhoto,
+        userPhoto: userPhoto ?? "",
         createdAt: new Date().toISOString(),
         parentId,
         likes: [],
       };
-      const updatedRooms = rooms.map((room) =>
-        room.id === roomId
-          ? { ...room, comments: [...room.comments, newComment] }
-          : room
-      );
-      setRooms(updatedRooms);
-      await persistRooms(updatedRooms);
+
+      const updatedComments = [...room.comments, newComment];
+      await updateDoc(roomRef(roomId), { comments: updatedComments });
     },
-    [rooms, persistRooms]
+    [rooms]
   );
 
-  const deleteRoom = useCallback(
-    async (roomId: string): Promise<void> => {
-      const updatedRooms = rooms.filter((room) => room.id !== roomId);
-      setRooms(updatedRooms);
-      await persistRooms(updatedRooms);
-    },
-    [rooms, persistRooms]
-  );
+  // ── deleteRoom ─────────────────────────────────────────────────────────────
+  const deleteRoom = useCallback(async (roomId: string): Promise<void> => {
+    await deleteDoc(roomRef(roomId));
+  }, []);
 
+  // ── toggleLike ─────────────────────────────────────────────────────────────
   const toggleLike = useCallback(
     async (
       roomId: string,
       commentId: string,
       userEmail: string
     ): Promise<{ wasLiked: boolean; commentOwnerEmail: string }> => {
+      const room = rooms.find((r) => r.id === roomId);
+      if (!room) throw new Error("Sala não encontrada.");
+
       let wasLiked = false;
       let commentOwnerEmail = "";
 
-      const updatedRooms = rooms.map((room) => {
-        if (room.id !== roomId) return room;
-        const updatedComments = room.comments.map((comment) => {
-          if (comment.id !== commentId) return comment;
-          commentOwnerEmail = comment.userEmail;
-          const alreadyLiked = comment.likes.includes(userEmail);
-          wasLiked = alreadyLiked;
-          return {
-            ...comment,
-            likes: alreadyLiked
-              ? comment.likes.filter((e) => e !== userEmail)
-              : [...comment.likes, userEmail],
-          };
-        });
-        return { ...room, comments: updatedComments };
+      const updatedComments = room.comments.map((comment) => {
+        if (comment.id !== commentId) return comment;
+        commentOwnerEmail = comment.userEmail;
+        const alreadyLiked = comment.likes.includes(userEmail);
+        wasLiked = alreadyLiked;
+        return {
+          ...comment,
+          likes: alreadyLiked
+            ? comment.likes.filter((e) => e !== userEmail)
+            : [...comment.likes, userEmail],
+        };
       });
 
-      setRooms(updatedRooms);
-      await persistRooms(updatedRooms);
+      await updateDoc(roomRef(roomId), { comments: updatedComments });
       return { wasLiked, commentOwnerEmail };
     },
-    [rooms, persistRooms]
+    [rooms]
   );
 
   return (

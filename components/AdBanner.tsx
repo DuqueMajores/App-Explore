@@ -1,4 +1,5 @@
-import { View, Text } from "react-native";
+// components/AdBanner.tsx
+import { View } from "react-native";
 import { BannerAd, BannerAdSize, TestIds } from "react-native-google-mobile-ads";
 
 export default function AdBanner() {
@@ -19,7 +20,7 @@ export default function AdBanner() {
         requestOptions={{
           requestNonPersonalizedAdsOnly: true,
           networkExtras: {
-            collapsible:"bottom",
+            collapsible: "bottom",
           },
         }}
       />
