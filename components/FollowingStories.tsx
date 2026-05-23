@@ -1,28 +1,21 @@
 /**
- * FollowingStories.tsx
- * Barra horizontal de stories estilo Instagram exibida no topo do index.
- * Mostra apenas usuários que o currentUser segue e que têm fotos ativas.
- * O primeiro item é sempre o próprio usuário (para adicionar foto).
+ * FollowingStories.tsx — migrado para Firestore
+ * Lê dados dos usuários seguidos diretamente do Firestore
+ * via onSnapshot, eliminando AsyncStorage.getItem("@App:users").
  */
 
 import React, { useEffect, useState, useCallback } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  Animated,
+  View, Text, ScrollView, TouchableOpacity,
+  Image, StyleSheet, Alert,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { MaterialIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFollow } from "../src/context/FollowContext";
-import { useGallery, GalleryPhoto } from "../src/context/GalleryContext";
-import StoryRing from "./StoryRing";
-import * as ImagePicker from "expo-image-picker";
-import { Alert } from "react-native";
+import { db, collection } from "../src/services/firebaseConfig";
+import { onSnapshot }     from "firebase/firestore";
+import { useFollow }      from "../src/context/FollowContext";
+import { useGallery }     from "../src/context/GalleryContext";
+import StoryRing          from "./StoryRing";
+import * as ImagePicker   from "expo-image-picker";
 
 interface PublicUser {
   name: string;
@@ -31,11 +24,7 @@ interface PublicUser {
 }
 
 interface FollowingStoriesProps {
-  currentUser: {
-    email: string;
-    name: string;
-    photo?: string;
-  };
+  currentUser: { email: string; name: string; photo?: string };
   onAddPhoto?: () => void;
 }
 
@@ -43,54 +32,48 @@ export default function FollowingStories({
   currentUser,
   onAddPhoto,
 }: FollowingStoriesProps) {
-  const { getFollowing } = useFollow();
+  const { getFollowing }                        = useFollow();
   const { getPhotosByUser, getActivePhotos, addPhoto } = useGallery();
-  const [followedUsers, setFollowedUsers] = useState<PublicUser[]>([]);
 
-  const following = getFollowing(currentUser.email);
-  const activePhotos = getActivePhotos();
-
-  // Carrega dados dos usuários seguidos
-  const loadUsers = useCallback(async () => {
-    if (following.length === 0) {
-      setFollowedUsers([]);
-      return;
-    }
-    try {
-      const raw = await AsyncStorage.getItem("@App:users");
-      if (!raw) return;
-      const all: any[] = JSON.parse(raw);
-      const filtered: PublicUser[] = all
-        .filter((u) => following.includes(u.email))
-        .map(({ passwordHash, ...u }) => u as PublicUser);
-      setFollowedUsers(filtered);
-    } catch {}
-  }, [following.join(",")]);
+  // Todos os usuários vindos do Firestore em tempo real
+  const [allUsers, setAllUsers] = useState<PublicUser[]>([]);
 
   useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+    const unsub = onSnapshot(
+      collection(db, "users"),
+      (snapshot) => {
+        const users: PublicUser[] = snapshot.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            name:  data.name  ?? "",
+            email: data.email ?? d.id,
+            photo: data.photo ?? undefined,
+          };
+        });
+        setAllUsers(users);
+      },
+      (error) => console.error("Erro ao ouvir usuários (stories):", error)
+    );
+    return () => unsub();
+  }, []);
+
+  const following    = getFollowing(currentUser.email);
+  const activePhotos = getActivePhotos();
 
   // Filtra apenas seguidos que têm stories ativos
-  const usersWithStories = followedUsers.filter((u) => {
-    const photos = getPhotosByUser(u.email);
-    return photos.length > 0;
-  });
+  const usersWithStories = allUsers.filter(
+    (u) =>
+      following.includes(u.email) &&
+      getPhotosByUser(u.email).length > 0
+  );
 
-  // O próprio usuário tem foto?
-  const ownPhotos = getPhotosByUser(currentUser.email);
+  const ownPhotos  = getPhotosByUser(currentUser.email);
   const hasOwnStory = ownPhotos.length > 0;
 
-  // Se não está seguindo ninguém e o próprio não tem story, oculta a barra
-  if (usersWithStories.length === 0 && !hasOwnStory && !onAddPhoto) {
-    return null;
-  }
+  if (usersWithStories.length === 0 && !hasOwnStory && !onAddPhoto) return null;
 
   const handleAddStory = async () => {
-    if (onAddPhoto) {
-      onAddPhoto();
-      return;
-    }
+    if (onAddPhoto) { onAddPhoto(); return; }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Permissão negada", "Precisamos de acesso à sua galeria.");
@@ -98,17 +81,10 @@ export default function FollowingStories({
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 5],
-      quality: 0.85,
+      allowsEditing: true, aspect: [4, 5], quality: 0.85,
     });
     if (!result.canceled) {
-      await addPhoto(
-        currentUser.email,
-        currentUser.name,
-        currentUser.photo,
-        result.assets[0].uri
-      );
+      await addPhoto(currentUser.email, currentUser.name, currentUser.photo, result.assets[0].uri);
       Alert.alert("✅ Foto publicada!", "Sua foto ficará visível por 24 horas.");
     }
   };
@@ -131,9 +107,7 @@ export default function FollowingStories({
             onAddPhoto={handleAddStory}
             currentUserEmail={currentUser.email}
           />
-          <Text style={styles.storyLabel} numberOfLines={1}>
-            Você
-          </Text>
+          <Text style={styles.storyLabel} numberOfLines={1}>Você</Text>
         </View>
 
         {/* Usuários seguidos com stories */}
@@ -173,16 +147,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
   },
-  storyItem: {
-    alignItems: "center",
-    gap: 3,
-    width: 48,
-  },
+  storyItem: { alignItems: "center", gap: 3, width: 48 },
   storyLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#555",
-    textAlign: "center",
-    maxWidth: 48,
+    fontSize: 10, fontWeight: "600", color: "#555",
+    textAlign: "center", maxWidth: 48,
   },
 });
