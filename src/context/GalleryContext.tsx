@@ -1,3 +1,15 @@
+/**
+ * GalleryContext.tsx — migrado para Firebase Firestore
+ *
+ * Coleção: "galleryPhotos"
+ *   Documento: photo.id (gerado localmente)
+ *   Campos:    id, userEmail, userName, userPhoto, imageUri,
+ *              createdAt, expiresAt, likes[]
+ *
+ * Fotos expiradas (>24h) são filtradas no cliente e removidas do Firestore
+ * em background. O listener em tempo real mantém todos os clientes sincronizados.
+ */
+
 import React, {
   createContext,
   useState,
@@ -5,9 +17,19 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  db,
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+} from "../services/firebaseConfig";
+import { onSnapshot } from "firebase/firestore";
 import * as Notifications from "expo-notifications";
 
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 export interface GalleryPhoto {
   id: string;
   userEmail: string;
@@ -15,8 +37,8 @@ export interface GalleryPhoto {
   userPhoto?: string;
   imageUri: string;
   createdAt: string;
-  expiresAt: string; // 24h após criação
-  likes: string[];   // emails que curtiram
+  expiresAt: string;
+  likes: string[];
 }
 
 interface GalleryContextData {
@@ -33,10 +55,9 @@ interface GalleryContextData {
   deletePhoto: (photoId: string) => Promise<void>;
 }
 
-const STORAGE_KEY = "@Gallery:photos";
-const FOLLOW_KEY = "@Follow:data";
-
-const GalleryContext = createContext<GalleryContextData>({} as GalleryContextData);
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const PHOTOS_COLLECTION = "galleryPhotos";
+const FOLLOW_COLLECTION = "follows"; // Coleção de follows no Firestore
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -46,30 +67,37 @@ function isExpired(photo: GalleryPhoto): boolean {
   return new Date() > new Date(photo.expiresAt);
 }
 
-/** Retorna os e-mails de quem segue o usuário `authorEmail` */
+const photoRef = (photoId: string) => doc(db, PHOTOS_COLLECTION, photoId);
+
+/** Retorna os e-mails de quem segue o usuário authorEmail via Firestore */
 async function getFollowersOf(authorEmail: string): Promise<string[]> {
   try {
-    const raw = await AsyncStorage.getItem(FOLLOW_KEY);
-    if (!raw) return [];
-    const map: Record<string, string[]> = JSON.parse(raw);
-    return Object.entries(map)
-      .filter(([, following]) => following.includes(authorEmail))
-      .map(([follower]) => follower);
-  } catch {
+    const snap = await getDocs(collection(db, FOLLOW_COLLECTION));
+    const followers: string[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as Record<string, string[]>;
+      const following: string[] = data[d.id] ?? [];
+      if (following.includes(authorEmail)) {
+        followers.push(d.id);
+      }
+    });
+    return followers;
+  } catch (e) {
+    console.error("Erro ao buscar seguidores:", e);
     return [];
   }
 }
 
-/** Dispara notificação para os seguidores quando o autor publica uma foto */
-async function notifyFollowers(authorEmail: string, authorName: string): Promise<void> {
+/** Dispara notificação local para seguidores quando o autor publica foto */
+async function notifyFollowers(
+  authorEmail: string,
+  authorName: string
+): Promise<void> {
   try {
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") return;
-
     const followers = await getFollowersOf(authorEmail);
     if (followers.length === 0) return;
-
-    // Uma única notificação agrupada (push local não tem destino individual em AsyncStorage)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: "📸 Nova foto no story!",
@@ -84,7 +112,7 @@ async function notifyFollowers(authorEmail: string, authorName: string): Promise
   }
 }
 
-/** Dispara notificação para seguidores quando o autor comenta no fórum */
+/** Notifica seguidores quando o autor comenta no fórum */
 export async function notifyFollowersForumComment(
   authorEmail: string,
   authorName: string,
@@ -93,10 +121,8 @@ export async function notifyFollowersForumComment(
   try {
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") return;
-
     const followers = await getFollowersOf(authorEmail);
     if (followers.length === 0) return;
-
     await Notifications.scheduleNotificationAsync({
       content: {
         title: "💬 Novo comentário de quem você segue!",
@@ -111,7 +137,7 @@ export async function notifyFollowersForumComment(
   }
 }
 
-/** Dispara notificação para seguidores quando o autor cria uma sala de fórum */
+/** Notifica seguidores quando o autor cria uma sala de fórum */
 export async function notifyFollowersForumRoom(
   authorEmail: string,
   authorName: string,
@@ -120,10 +146,8 @@ export async function notifyFollowersForumRoom(
   try {
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") return;
-
     const followers = await getFollowersOf(authorEmail);
     if (followers.length === 0) return;
-
     await Notifications.scheduleNotificationAsync({
       content: {
         title: "🗣️ Nova sala de fórum!",
@@ -138,44 +162,59 @@ export async function notifyFollowersForumRoom(
   }
 }
 
+// ── Context ───────────────────────────────────────────────────────────────────
+const GalleryContext = createContext<GalleryContextData>(
+  {} as GalleryContextData
+);
+
 export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
 
-  // Carrega e limpa fotos expiradas
+  // ── Listener em tempo real + limpeza de expiradas ─────────────────────────
   useEffect(() => {
-    async function load() {
-      try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed: GalleryPhoto[] = JSON.parse(stored);
-          const valid = parsed.filter((p) => !isExpired(p));
-          setPhotos(valid);
-          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(valid));
-        }
-      } catch (e) {
-        console.error("Erro ao carregar galeria:", e);
-      }
-    }
-    load();
+    const unsub = onSnapshot(
+      collection(db, PHOTOS_COLLECTION),
+      (snapshot) => {
+        const fetched: GalleryPhoto[] = [];
+        const toDelete: string[] = [];
 
-    // Limpa expiradas a cada minuto
-    const interval = setInterval(async () => {
-      setPhotos((prev) => {
-        const valid = prev.filter((p) => !isExpired(p));
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(valid)).catch(() => {});
-        return valid;
-      });
+        snapshot.docs.forEach((d) => {
+          const photo = d.data() as GalleryPhoto;
+          if (isExpired(photo)) {
+            toDelete.push(photo.id);
+          } else {
+            fetched.push(photo);
+          }
+        });
+
+        setPhotos(fetched);
+
+        // Remove expiradas do Firestore em background
+        toDelete.forEach((id) => {
+          deleteDoc(photoRef(id)).catch((e) =>
+            console.error("Erro ao remover foto expirada:", e)
+          );
+        });
+      },
+      (error) => {
+        console.error("Erro ao ouvir galeria:", error);
+      }
+    );
+
+    // Limpa expiradas a cada minuto também no estado local (antes do próximo snapshot)
+    const interval = setInterval(() => {
+      setPhotos((prev) => prev.filter((p) => !isExpired(p)));
     }, 60_000);
 
-    return () => clearInterval(interval);
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
   }, []);
 
-  const persist = useCallback(async (updated: GalleryPhoto[]) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  }, []);
-
+  // ── addPhoto ───────────────────────────────────────────────────────────────
   const addPhoto = useCallback(
     async (
       userEmail: string,
@@ -185,44 +224,41 @@ export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({
     ) => {
       const now = new Date();
       const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
       const newPhoto: GalleryPhoto = {
         id: generateId(),
         userEmail,
         userName,
-        userPhoto,
+        userPhoto: userPhoto ?? "",
         imageUri,
         createdAt: now.toISOString(),
         expiresAt: expires.toISOString(),
         likes: [],
       };
-      const updated = [newPhoto, ...photos];
-      setPhotos(updated);
-      await persist(updated);
 
-      // ✅ Notifica seguidores
+      await setDoc(photoRef(newPhoto.id), newPhoto);
       await notifyFollowers(userEmail, userName);
     },
-    [photos, persist]
+    []
   );
 
+  // ── toggleLike ─────────────────────────────────────────────────────────────
   const toggleLike = useCallback(
     async (photoId: string, userEmail: string) => {
-      const updated = photos.map((p) => {
-        if (p.id !== photoId) return p;
-        const liked = p.likes.includes(userEmail);
-        return {
-          ...p,
-          likes: liked
-            ? p.likes.filter((e) => e !== userEmail)
-            : [...p.likes, userEmail],
-        };
-      });
-      setPhotos(updated);
-      await persist(updated);
+      const photo = photos.find((p) => p.id === photoId);
+      if (!photo) return;
+
+      const liked = photo.likes.includes(userEmail);
+      const updatedLikes = liked
+        ? photo.likes.filter((e) => e !== userEmail)
+        : [...photo.likes, userEmail];
+
+      await updateDoc(photoRef(photoId), { likes: updatedLikes });
     },
-    [photos, persist]
+    [photos]
   );
 
+  // ── getPhotosByUser ────────────────────────────────────────────────────────
   const getPhotosByUser = useCallback(
     (userEmail: string) =>
       photos
@@ -234,6 +270,7 @@ export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({
     [photos]
   );
 
+  // ── getActivePhotos ────────────────────────────────────────────────────────
   const getActivePhotos = useCallback(
     () =>
       photos
@@ -242,14 +279,10 @@ export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({
     [photos]
   );
 
-  const deletePhoto = useCallback(
-    async (photoId: string) => {
-      const updated = photos.filter((p) => p.id !== photoId);
-      setPhotos(updated);
-      await persist(updated);
-    },
-    [photos, persist]
-  );
+  // ── deletePhoto ────────────────────────────────────────────────────────────
+  const deletePhoto = useCallback(async (photoId: string) => {
+    await deleteDoc(photoRef(photoId));
+  }, []);
 
   return (
     <GalleryContext.Provider
@@ -269,6 +302,7 @@ export const GalleryProvider: React.FC<{ children: React.ReactNode }> = ({
 
 export function useGallery() {
   const ctx = useContext(GalleryContext);
-  if (!ctx) throw new Error("useGallery deve ser usado dentro de GalleryProvider");
+  if (!ctx)
+    throw new Error("useGallery deve ser usado dentro de GalleryProvider");
   return ctx;
 }
