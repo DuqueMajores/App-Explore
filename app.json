@@ -17,7 +17,12 @@
     "scheme": "explore",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +30,11 @@
         "backgroundColor": "#E6F4FE"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.moisesdamasceno.explore"
+      "package": "com.moisesdamasceno.explore",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "output": "static",

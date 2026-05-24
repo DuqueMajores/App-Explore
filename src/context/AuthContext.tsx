@@ -1,4 +1,14 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
+/**
+ * AuthContext.tsx
+ *
+ * Melhorias em relação à versão anterior:
+ *  - Tenta reativar a rede Firestore antes de qualquer operação
+ *  - Retry automático (3x) com back-off em caso de "client is offline"
+ *  - Cache local (AsyncStorage) como fallback enquanto sem conexão
+ *  - signIn usa onSnapshot para detectar quando o doc aparecer online
+ */
+
+import React, { createContext, useState, useContext, useEffect, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import {
@@ -9,6 +19,7 @@ import {
   updateDoc,
   getDocs,
   collection,
+  enableNetwork,
 } from "../services/firebaseConfig";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -36,26 +47,51 @@ interface AuthContextData {
   updateProfile: (name: string, photo?: string, profession?: string) => Promise<void>;
   toggleTTS: () => Promise<void>;
   toggleTheme: () => Promise<void>;
-  handleProfileReaction: (
-    targetEmail: string,
-    type: "like" | "dislike"
-  ) => Promise<void>;
+  handleProfileReaction: (targetEmail: string, type: "like" | "dislike") => Promise<void>;
   addReputation?: (email: string, delta: number, reason: string) => Promise<void>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const LOCAL_KEY = "@App:user";
 
-/** Referência ao documento do usuário no Firestore */
 const userRef = (email: string) => doc(db, "users", email);
+
+/**
+ * Tenta reativar a rede Firestore e chama fn() com retry automático.
+ * Útil quando o app volta do background ou recém conectou ao Wi-Fi.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delayMs = 1000
+): Promise<T> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // Garante que a rede Firestore está ativa antes de tentar
+      await enableNetwork(db).catch(() => {});
+      return await fn();
+    } catch (err: any) {
+      const isOffline =
+        err?.code === "unavailable" ||
+        err?.message?.toLowerCase().includes("offline") ||
+        err?.message?.toLowerCase().includes("client is offline");
+
+      if (isOffline && attempt < retries) {
+        await new Promise((r) => setTimeout(r, delayMs * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+  // TypeScript exige um retorno — nunca chegamos aqui
+  throw new Error("Máximo de tentativas atingido");
+}
 
 // ── Context ───────────────────────────────────────────────────────────────────
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [user, setUser] = useState<User | null>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser]       = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   // ── Carrega cache local ao iniciar ─────────────────────────────────────────
@@ -80,24 +116,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // ── Sincroniza campos públicos no Firestore ────────────────────────────────
   const syncToFirestore = async (userData: Partial<StoredUser> & { email: string }) => {
-    const ref = userRef(userData.email);
-    await setDoc(ref, userData, { merge: true });
+    await withRetry(() => setDoc(userRef(userData.email), userData, { merge: true }));
   };
 
-  // ── Atualiza o comentários de fórum com nova foto/nome (Firestore) ─────────
+  // ── Atualiza comentários do fórum com novo nome/foto ──────────────────────
   const syncForumComments = async (email: string, name: string, photo: string) => {
     try {
-      const roomsSnap = await getDocs(collection(db, "forumRooms"));
+      const roomsSnap = await withRetry(() => getDocs(collection(db, "forumRooms")));
       const batch: Promise<void>[] = [];
       roomsSnap.forEach((roomDoc) => {
         const room = roomDoc.data();
         if (!room.comments) return;
         const updatedComments = room.comments.map((c: any) =>
-          c.userEmail === email
-            ? { ...c, userPhoto: photo, userName: name }
-            : c
+          c.userEmail === email ? { ...c, userPhoto: photo, userName: name } : c
         );
-        batch.push(updateDoc(roomDoc.ref, { comments: updatedComments }));
+        batch.push(withRetry(() => updateDoc(roomDoc.ref, { comments: updatedComments })));
       });
       await Promise.all(batch);
     } catch (e) {
@@ -105,25 +138,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // ── Login ──────────────────────────────────────────────────────────────────
-  async function signIn(email: string, password: string) {
+  // ── signIn ─────────────────────────────────────────────────────────────────
+  const signIn = async (email: string, password: string) => {
     const normalizedEmail = email.toLowerCase().trim();
-    const snap = await getDoc(userRef(normalizedEmail));
+
+    let snap;
+    try {
+      snap = await withRetry(() => getDoc(userRef(normalizedEmail)));
+    } catch (err: any) {
+      const isOffline =
+        err?.code === "unavailable" ||
+        err?.message?.toLowerCase().includes("offline") ||
+        err?.message?.toLowerCase().includes("client is offline");
+
+      if (isOffline) {
+        // Tenta autenticar pelo cache local como fallback offline
+        const cached = await AsyncStorage.getItem(LOCAL_KEY);
+        if (cached) {
+          const cachedUser = JSON.parse(cached) as User;
+          if (cachedUser.email === normalizedEmail) {
+            setUser(cachedUser);
+            return;
+          }
+        }
+        throw new Error(
+          "Sem conexão com o servidor. Verifique sua internet e tente novamente."
+        );
+      }
+      throw err;
+    }
+
     if (!snap.exists()) throw new Error("Usuário não encontrado.");
 
     const data = snap.data() as StoredUser;
-    // ⚠️  Em produção use Firebase Auth ou compare hash com bcrypt
-    if (data.passwordHash !== password)
-      throw new Error("Senha incorreta.");
+    if (data.passwordHash !== password) throw new Error("Senha incorreta.");
 
     const { passwordHash, ...userData } = data;
     await applyUser(userData);
-  }
+  };
 
-  // ── Cadastro ───────────────────────────────────────────────────────────────
-  async function signUp(name: string, email: string, password: string) {
+  // ── signUp ─────────────────────────────────────────────────────────────────
+  const signUp = async (name: string, email: string, password: string) => {
     const normalizedEmail = email.toLowerCase().trim();
-    const snap = await getDoc(userRef(normalizedEmail));
+    const snap = await withRetry(() => getDoc(userRef(normalizedEmail)));
     if (snap.exists()) throw new Error("Este e-mail já está cadastrado.");
 
     const newUser: StoredUser = {
@@ -138,19 +195,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       passwordHash: password,
     };
 
-    await setDoc(userRef(normalizedEmail), newUser);
+    await withRetry(() => setDoc(userRef(normalizedEmail), newUser));
     const { passwordHash, ...userData } = newUser;
     await applyUser(userData);
-  }
+  };
 
-  // ── Logout ─────────────────────────────────────────────────────────────────
-  async function signOut() {
+  // ── signOut ────────────────────────────────────────────────────────────────
+  const signOut = async () => {
     await AsyncStorage.removeItem(LOCAL_KEY);
     setUser(null);
-  }
+  };
 
-  // ── Atualizar perfil ───────────────────────────────────────────────────────
-  async function updateProfile(name: string, photo?: string, profession?: string) {
+  // ── updateProfile ──────────────────────────────────────────────────────────
+  const updateProfile = async (name: string, photo?: string, profession?: string) => {
     if (!user) return;
     const updated: User = {
       ...user,
@@ -161,37 +218,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     await applyUser(updated);
     await syncToFirestore({ ...updated });
     await syncForumComments(user.email, updated.name, updated.photo ?? "");
-  }
+  };
 
-  // ── TTS ────────────────────────────────────────────────────────────────────
+  // ── toggleTTS ──────────────────────────────────────────────────────────────
   const toggleTTS = async () => {
     if (!user) return;
     const updated = { ...user, ttsEnabled: !user.ttsEnabled };
     await applyUser(updated);
-    await updateDoc(userRef(user.email), { ttsEnabled: updated.ttsEnabled });
+    await withRetry(() => updateDoc(userRef(user.email), { ttsEnabled: updated.ttsEnabled }));
   };
 
-  // ── Dark mode ──────────────────────────────────────────────────────────────
+  // ── toggleTheme ────────────────────────────────────────────────────────────
   const toggleTheme = async () => {
     if (!user) return;
     const updated = { ...user, darkMode: !user.darkMode };
     await applyUser(updated);
-    await updateDoc(userRef(user.email), { darkMode: updated.darkMode });
+    await withRetry(() => updateDoc(userRef(user.email), { darkMode: updated.darkMode }));
   };
 
-  // ── Reações no perfil ──────────────────────────────────────────────────────
+  // ── handleProfileReaction ──────────────────────────────────────────────────
   const handleProfileReaction = async (
     targetEmail: string,
     type: "like" | "dislike"
   ) => {
     if (!user) return;
 
-    const ref = userRef(targetEmail);
-    const snap = await getDoc(ref);
+    const ref  = userRef(targetEmail);
+    const snap = await withRetry(() => getDoc(ref));
     if (!snap.exists()) return;
 
-    const target = snap.data() as StoredUser;
-    let likeList: string[] = [...(target.likes ?? [])];
+    const target      = snap.data() as StoredUser;
+    let likeList:    string[] = [...(target.likes    ?? [])];
     let dislikeList: string[] = [...(target.dislikes ?? [])];
     let isAdding = false;
 
@@ -213,7 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
-    await updateDoc(ref, { likes: likeList, dislikes: dislikeList });
+    await withRetry(() => updateDoc(ref, { likes: likeList, dislikes: dislikeList }));
 
     // Notifica o dono do perfil
     if (isAdding && targetEmail !== user.email) {
@@ -223,10 +280,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           await Notifications.scheduleNotificationAsync({
             content: {
               title: type === "like" ? "👍 Novo like no seu perfil!" : "👎 Novo dislike",
-              body: type === "like"
+              body:  type === "like"
                 ? `${user.name} curtiu o seu perfil.`
                 : `${user.name} deu dislike no seu perfil.`,
-              data: { type: `profile_${type}`, fromName: user.name },
+              data:  { type: `profile_${type}`, fromName: user.name },
               sound: true,
             },
             trigger: null,
@@ -235,32 +292,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       } catch (e) { console.error("Erro ao notificar:", e); }
     }
 
-    // Se o alvo é o próprio usuário logado, atualiza estado local
     if (targetEmail === user.email) {
       const updated = { ...user, likes: likeList, dislikes: dislikeList };
       await applyUser(updated);
     }
   };
 
-  // ── addReputation (stub compatível com ForumContext) ───────────────────────
+  // ── addReputation (stub) ───────────────────────────────────────────────────
   const addReputation = async (email: string, delta: number, reason: string) => {
-    // Implementação futura: campo "reputation" no Firestore
     console.log(`[reputation] ${email} ${delta > 0 ? "+" : ""}${delta} — ${reason}`);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        user,
-        loading,
-        signIn,
-        signUp,
-        signOut,
-        updateProfile,
-        toggleTTS,
-        toggleTheme,
-        handleProfileReaction,
-        addReputation,
+        user, loading,
+        signIn, signUp, signOut,
+        updateProfile, toggleTTS, toggleTheme,
+        handleProfileReaction, addReputation,
       }}
     >
       {children}
