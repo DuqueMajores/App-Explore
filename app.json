@@ -7,7 +7,8 @@
         {
           "androidAppId": "ca-app-pub-2727232322523464~3370670885"
         }
-      ]
+      ],
+      "@react-native-firebase/app"
     ],
     "name": "Explore",
     "slug": "explore",
