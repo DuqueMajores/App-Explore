@@ -22,6 +22,8 @@ import {
   enableNetwork,
 } from "../services/firebaseConfig";
 
+await Notifications.requestPermissionsAsync();
+
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface User {
   name: string;
